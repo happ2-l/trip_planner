@@ -24,15 +24,66 @@
     if (cfg.apiKey && cfg.apiKey.indexOf("PASTE") === -1 && window.firebase) {
       try {
         firebase.initializeApp(cfg);
-        var db = firebase.database();
-        fbRoot = db.ref(ROOT_PATH); mode = "firebase";
-        fbRoot.on("value", function (s) { STATE = s.val() || {}; emit(); });
-        seedDefaults(); return;
+        mode = "firebase";
+        if (firebase.auth) {
+          firebase.auth().onAuthStateChanged(function (user) {
+            if (user) { hideLogin(); attachDB(); }
+            else { fbRoot = null; STATE = {}; emit(); showLogin(); }
+          });
+        } else { attachDB(); }  // auth SDK 미로드 시(구버전) 그냥 연결
+        return;
       } catch (e) { console.warn("Firebase init 실패, 로컬 모드:", e); }
     }
     mode = "local";
     try { STATE = JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch (e) { STATE = {}; }
     seedDefaults(); emit();
+  }
+
+  function attachDB() {
+    if (fbRoot) return;
+    var db = firebase.database();
+    fbRoot = db.ref(ROOT_PATH);
+    fbRoot.on("value", function (s) { STATE = s.val() || {}; emit(); });
+    seedDefaults();
+  }
+
+  /* ---------- 로그인 게이트 ---------- */
+  function showLogin() {
+    if (document.getElementById("login")) return;
+    var d = document.createElement("div");
+    d.id = "login"; d.className = "loginwrap";
+    d.innerHTML =
+      '<div class="loginbox">' +
+        '<div class="loginbrand">도쿄 · 東京</div>' +
+        '<div class="loginsub">우리 여행 공유 앱 · 로그인</div>' +
+        '<input id="logemail" type="email" placeholder="이메일" autocomplete="username" autocapitalize="off">' +
+        '<input id="logpw" type="password" placeholder="비밀번호" autocomplete="current-password">' +
+        '<button id="logbtn">로그인</button>' +
+        '<div id="logerr" class="logerr"></div>' +
+        '<div class="loginhint">친구들과 공유하는 같은 이메일/비밀번호로 로그인하세요.<br>한 번 로그인하면 이 기기엔 계속 유지돼요.</div>' +
+      '</div>';
+    document.body.appendChild(d);
+    var go = function () {
+      var em = (d.querySelector("#logemail").value || "").trim(), pw = d.querySelector("#logpw").value || "";
+      d.querySelector("#logerr").textContent = "";
+      if (!em || !pw) { d.querySelector("#logerr").textContent = "이메일과 비밀번호를 입력하세요."; return; }
+      firebase.auth().signInWithEmailAndPassword(em, pw).catch(function (e) {
+        d.querySelector("#logerr").textContent = loginErr(e);
+      });
+    };
+    d.querySelector("#logbtn").addEventListener("click", go);
+    d.addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
+    d.querySelector("#logemail").focus();
+  }
+  function hideLogin() { var d = document.getElementById("login"); if (d) d.remove(); }
+  function loginErr(e) {
+    var c = (e && e.code) || "";
+    if (c.indexOf("wrong-password") >= 0 || c.indexOf("user-not-found") >= 0 || c.indexOf("invalid-credential") >= 0 || c.indexOf("invalid-login") >= 0)
+      return "이메일 또는 비밀번호가 올바르지 않아요.";
+    if (c.indexOf("invalid-email") >= 0) return "이메일 형식을 확인하세요.";
+    if (c.indexOf("too-many-requests") >= 0) return "시도가 많아요. 잠시 후 다시 시도하세요.";
+    if (c.indexOf("network") >= 0) return "네트워크 연결을 확인하세요.";
+    return "로그인 실패: " + (e && e.message ? e.message : c);
   }
 
   function seedDefaults() {
@@ -333,7 +384,9 @@
       '<div class="sechead"><div class="eyebrow">CHECKLIST</div><div class="sectitle"><div class="kr">준비</div><div class="jp">準備</div></div></div>' +
       '<div class="notice"><div class="t">6월 도쿄는 장마철이에요</div><div class="b">비 소식이 잦고 습해요. 접이식 우산과 통풍 잘되는 옷을 꼭 챙기세요.</div></div>' +
       groups +
-      '<div style="padding:4px 22px 0"><div class="subhead" style="margin-bottom:12px">여행 정보</div>' + info + '</div></div>';
+      '<div style="padding:4px 22px 0"><div class="subhead" style="margin-bottom:12px">여행 정보</div>' + info + '</div>' +
+      (mode === "firebase" ? '<div style="text-align:center"><button class="logout" data-logout="1">로그아웃</button></div>' : '') +
+      '</div>';
   }
 
   /* ===== 장소 상세 시트 ===== */
@@ -425,6 +478,7 @@
     var sg = t.closest("[data-seg]"); if (sg) { armed = null; seg = sg.dataset.seg; render(); return; }
     var dts = t.closest("[data-daytrip]"); if (dts) { armed = null; DB.set("daytrip", dts.dataset.daytrip); return; }
     var cu = t.closest("[data-cur]"); if (cu) { armed = null; DB.set("budgetCur", cu.dataset.cur); return; }
+    if (t.dataset.logout) { if (window.firebase && firebase.auth) firebase.auth().signOut(); return; }
     if (t.closest("[data-close]")) { selected = null; renderSheet(); return; }
     if (t.dataset.delplace) { var dpv = t.dataset.delplace; armOrRun("delplace:" + dpv, function () { DB.remove("uplaces/" + dpv); }); return; }
     if (t.dataset.hideplace) { var hpv = t.dataset.hideplace; armOrRun("hideplace:" + hpv, function () { DB.set("phidden/" + hpv, true); }); return; }

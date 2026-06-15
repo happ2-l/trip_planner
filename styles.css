@@ -232,6 +232,21 @@ input{font-family:inherit}
 .infocard .irow .k{font-size:14px;color:var(--ink2)}
 .infocard .irow .v{font-size:13px;color:var(--muted);text-align:right}
 
+/* ===== 로그인 게이트 ===== */
+.loginwrap{position:fixed;inset:0;z-index:1000;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:24px;
+  padding-top:max(24px,env(safe-area-inset-top))}
+.loginbox{width:100%;max-width:340px;text-align:center}
+.loginbrand{font-family:var(--serif);font-size:42px;color:var(--ink);line-height:1}
+.loginsub{font-size:13px;color:var(--sub);margin:8px 0 26px}
+.loginbox input{display:block;width:100%;margin:0 0 10px;background:var(--card);border:1px solid var(--line);
+  border-radius:12px;padding:13px 14px;font-size:15px;color:var(--ink)}
+.loginbox input:focus{outline:none;border-color:var(--red)}
+.loginbox #logbtn{width:100%;background:var(--dark);color:#f4eee2;border:none;border-radius:12px;padding:14px;
+  font-size:15px;font-weight:700;cursor:pointer;margin-top:4px}
+.logerr{color:var(--red);font-size:13px;margin-top:10px;min-height:18px}
+.loginhint{font-size:12px;color:var(--muted);margin-top:14px;line-height:1.6}
+.logout{margin:20px 0 4px;font-size:12px;color:var(--muted);background:none;border:none;text-decoration:underline;cursor:pointer}
+
 /* ===== 하단 탭 ===== */
 nav{display:flex;background:rgba(244,238,226,0.97);border-top:1px solid rgba(40,33,26,0.1);
   backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding-bottom:env(safe-area-inset-bottom)}

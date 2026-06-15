@@ -1,5 +1,5 @@
 /* 서비스워커: 오프라인 캐싱 (앱 쉘) */
-var CACHE = "tokyo-trip-v8";
+var CACHE = "tokyo-trip-v9";
 var ASSETS = [
   "./",
   "./index.html",
@@ -15,6 +15,7 @@ var ASSETS = [
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
   "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js",
+  "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js",
   "https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"
 ];
 
