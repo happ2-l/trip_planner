@@ -1,21 +1,19 @@
 /* ============================================================
-   실시간 공유 설정 (Firebase Realtime Database)
-   ------------------------------------------------------------
-   ※ 아래 값을 채우기 전에도 앱은 정상 동작합니다.
-     (단, 공유 없이 "이 기기에만" 저장됩니다 = 오프라인 모드)
-
-   친구들과 실시간 공유하려면 README.md 의 "실시간 공유 설정"
-   순서대로 진행한 뒤, 아래 값을 본인 프로젝트 값으로 교체하세요.
-   세 명 모두 같은 파일(같은 값)을 쓰면 같은 "방"에 들어갑니다.
+   실시간 공유 설정 (Firebase) — happ2-l / trip-planner
+   세 명이 같은 주소로 접속하면 같은 방(TRIP_ID)에서 공유됩니다.
+   apiKey는 비밀이 아니라 식별자라 공개돼도 안전합니다.
+   (보안은 Authentication 로그인 + DB 규칙 auth!=null 이 담당)
    ============================================================ */
 
 window.FIREBASE_CONFIG = {
-  apiKey: "PASTE_YOUR_API_KEY",
-  authDomain: "PASTE.firebaseapp.com",
-  databaseURL: "https://PASTE-default-rtdb.firebaseio.com",
-  projectId: "PASTE",
-  appId: "PASTE",
+  apiKey: "AIzaSyB_qBIfQshohryFNzVZ1XPxU5IPQOJjY7Q",
+  authDomain: "trip-planner-ef802.firebaseapp.com",
+  databaseURL: "https://trip-planner-ef802-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "trip-planner-ef802",
+  storageBucket: "trip-planner-ef802.firebasestorage.app",
+  messagingSenderId: "711164080128",
+  appId: "1:711164080128:web:42cba1b1a3ed70a95fe8e5",
 };
 
-// 같은 값이면 같은 일정을 공유합니다. 우리끼리만 아는 값으로 바꿔도 OK.
-window.TRIP_ID = "tokyo-2026-06-우리팀";
+// 우리만 아는 방 이름 (친구 3명 모두 이 값으로 같은 일정 공유)
+window.TRIP_ID = "tokyo2026-happ2-x9f2k7";
