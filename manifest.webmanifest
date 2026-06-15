@@ -1,0 +1,17 @@
+{
+  "name": "도쿄 2박 3일",
+  "short_name": "도쿄여행",
+  "description": "친구들과 함께하는 도쿄 여행 일정·맛집 앱",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f2ece1",
+  "theme_color": "#f2ece1",
+  "lang": "ko",
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "./icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

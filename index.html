@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+  <title>도쿄 · 東京</title>
+  <meta name="theme-color" content="#f2ece1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="도쿄여행">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <link rel="icon" href="./icons/favicon-32.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;600;700&family=Noto+Serif+KR:wght@500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="./styles.css?v=8">
+</head>
+<body>
+  <div id="app">
+    <div id="scroll"></div>
+    <nav>
+      <button class="navbtn on" data-tab="itin"><span class="ic"><span class="bars"><i></i><i></i><i></i></span></span><span class="lb">일정</span></button>
+      <button class="navbtn" data-tab="map"><span class="ic"><span class="teardrop"></span></span><span class="lb">지도</span></button>
+      <button class="navbtn" data-tab="places"><span class="ic"><span class="diamond"></span></span><span class="lb">장소</span></button>
+      <button class="navbtn" data-tab="budget"><span class="ic"><span class="circle"></span></span><span class="lb">정산</span></button>
+      <button class="navbtn" data-tab="prep"><span class="ic"><span class="square"></span></span><span class="lb">준비</span></button>
+    </nav>
+    <div id="sheet"></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <script src="./firebase-config.js"></script>
+  <script src="./data.js?v=8"></script>
+  <script src="./app.js?v=8"></script>
+</body>
+</html>

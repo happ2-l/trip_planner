@@ -1,0 +1,9 @@
+# 배포 사이트에 필요 없는 개발용 파일 (GitHub에 안 올림)
+gen_icons.py
+gen_photos.py
+tokyo_trip_app_deploy.zip
+도쿄 트립.html
+_extracted_design.html
+.claude/
+.DS_Store
+Thumbs.db
