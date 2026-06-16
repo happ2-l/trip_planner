@@ -153,19 +153,28 @@
   }
 
   /* ---------- 장소 검색 (구글 플레이스 우선, 없으면 OSM/Photon) ---------- */
-  var searchTimer = null, lastResults = [], mapsReady = false;
+  var searchTimer = null, lastResults = [], mapsReady = false, mapsDiag = "";
+  function hasMapsKey() { var k = window.MAPS_API_KEY; return k && k.indexOf("PASTE") === -1; }
+  function engineText() {
+    if (!hasMapsKey()) return "⚪ 무료(OSM) 검색 — 구글 키 없음";
+    if (mapsReady) return mapsDiag ? ("🟢 구글 검색 · ⚠ " + mapsDiag) : "🟢 구글 지도 검색 연결됨";
+    return mapsDiag ? ("⚠ " + mapsDiag + " → 무료 검색 사용") : "🟡 구글 연결 중… (안 되면 무료 검색)";
+  }
+  function updateEngine() { var el = document.getElementById("plengine"); if (el) el.textContent = engineText(); }
   function initMaps() {
-    var key = window.MAPS_API_KEY;
-    if (!key || key.indexOf("PASTE") !== -1) return;  // 키 없으면 OSM 사용
-    if (window.google && window.google.maps) { mapsReady = true; return; }
+    if (!hasMapsKey()) return;  // 키 없으면 OSM 사용
+    window.gm_authFailure = function () { mapsReady = false; mapsDiag = "구글 인증 실패 — 키의 도메인 제한/‘Maps JavaScript API’ 활성화 확인"; updateEngine(); };
+    if (window.google && window.google.maps) { mapsReady = true; updateEngine(); return; }
     var s = document.createElement("script");
-    s.src = "https://maps.googleapis.com/maps/api/js?key=" + encodeURIComponent(key) + "&v=weekly&libraries=places&loading=async";
+    s.src = "https://maps.googleapis.com/maps/api/js?key=" + encodeURIComponent(window.MAPS_API_KEY) + "&v=weekly&libraries=places&loading=async";
     s.async = true;
     s.onload = function () {
       if (window.google && google.maps && google.maps.importLibrary)
-        google.maps.importLibrary("places").then(function () { mapsReady = true; }).catch(function (e) { console.warn("Places 로드 실패:", e); });
+        google.maps.importLibrary("places").then(function () { mapsReady = true; mapsDiag = ""; updateEngine(); })
+          .catch(function (e) { mapsDiag = "Places(New) 로드 실패: " + ((e && e.message) || e); updateEngine(); });
+      else { mapsDiag = "Maps 객체 없음"; updateEngine(); }
     };
-    s.onerror = function () { console.warn("Maps JS 로드 실패 — OSM 검색 사용"); };
+    s.onerror = function () { mapsDiag = "Maps 스크립트 로드 실패(네트워크/차단)"; updateEngine(); };
     document.head.appendChild(s);
   }
   function placeSearch(q) { if (mapsReady) googleAuto(q); else photonSearch(q); }
@@ -186,8 +195,9 @@
           name: (sf.mainText && sf.mainText.text) || (pp.text && pp.text.text) || q,
           area: (sf.secondaryText && sf.secondaryText.text) || "" };
       });
+      mapsDiag = ""; updateEngine();
       renderResults(q);
-    }).catch(function (e) { console.warn("구글 자동완성 실패 → OSM:", e); photonSearch(q); });
+    }).catch(function (e) { mapsDiag = "검색 오류: " + ((e && e.message) || e); updateEngine(); console.warn("구글 자동완성 실패 → OSM:", e); photonSearch(q); });
   }
   function addPlaceFromGoogle(r) {
     if (!r || !r.placeId) return;
@@ -440,7 +450,7 @@
     var segs = (window.SEGMENTS || []).map(function (s) {
       return '<div class="opt ' + (seg === s.key ? "on" : "") + '" data-seg="' + s.key + '">' + esc(s.label) + '</div>';
     }).join("");
-    var addf = '<div class="placeadd2"><input id="plsearch" placeholder="🔎 가게·장소 검색해서 추가 (예: Fuglen Tokyo)" autocomplete="off"><div id="plresults" class="plresults"></div></div>';
+    var addf = '<div class="placeadd2"><input id="plsearch" placeholder="🔎 가게·장소 검색해서 추가 (예: Fuglen Tokyo)" autocomplete="off"><div class="plengine" id="plengine">' + esc(engineText()) + '</div><div id="plresults" class="plresults"></div></div>';
     return '<div class="sec">' +
       '<div class="sechead"><div class="eyebrow">PLACES</div><div class="sectitle"><div class="kr">가볼 곳</div><div class="jp">名店</div></div></div>' +
       '<div class="seg">' + segs + '</div>' +
