@@ -161,21 +161,26 @@
     return mapsDiag ? ("⚠ " + mapsDiag + " → 무료 검색 사용") : "🟡 구글 연결 중… (안 되면 무료 검색)";
   }
   function updateEngine() { var el = document.getElementById("plengine"); if (el) el.textContent = engineText(); }
+  function loadPlacesLib() {
+    google.maps.importLibrary("places").then(function () { mapsReady = true; mapsDiag = ""; updateEngine(); })
+      .catch(function (e) { mapsDiag = "Places(New) 로드 실패: " + ((e && e.message) || e); updateEngine(); });
+  }
   function initMaps() {
     if (!hasMapsKey()) return;  // 키 없으면 OSM 사용
-    window.gm_authFailure = function () { mapsReady = false; mapsDiag = "구글 인증 실패 — 키의 도메인 제한/‘Maps JavaScript API’ 활성화 확인"; updateEngine(); };
-    if (window.google && window.google.maps) { mapsReady = true; updateEngine(); return; }
+    window.gm_authFailure = function () { mapsReady = false; mapsDiag = "구글 인증 실패 — ‘Maps JavaScript API’ 미사용 또는 키 도메인제한 확인"; updateEngine(); };
+    if (window.google && window.google.maps && window.google.maps.importLibrary) { loadPlacesLib(); return; }
     var s = document.createElement("script");
-    s.src = "https://maps.googleapis.com/maps/api/js?key=" + encodeURIComponent(window.MAPS_API_KEY) + "&v=weekly&libraries=places&loading=async";
+    s.src = "https://maps.googleapis.com/maps/api/js?key=" + encodeURIComponent(window.MAPS_API_KEY) + "&v=weekly&loading=async&libraries=places";
     s.async = true;
-    s.onload = function () {
-      if (window.google && google.maps && google.maps.importLibrary)
-        google.maps.importLibrary("places").then(function () { mapsReady = true; mapsDiag = ""; updateEngine(); })
-          .catch(function (e) { mapsDiag = "Places(New) 로드 실패: " + ((e && e.message) || e); updateEngine(); });
-      else { mapsDiag = "Maps 객체 없음"; updateEngine(); }
-    };
-    s.onerror = function () { mapsDiag = "Maps 스크립트 로드 실패(네트워크/차단)"; updateEngine(); };
+    s.onerror = function () { mapsDiag = "Maps 스크립트 로드 실패(네트워크/차단/키)"; updateEngine(); };
     document.head.appendChild(s);
+    // loading=async 는 onload 타이밍이 들쭉날쭉 → importLibrary 가 준비될 때까지 폴링
+    var tries = 0;
+    (function waitFor() {
+      if (window.google && window.google.maps && window.google.maps.importLibrary) { loadPlacesLib(); return; }
+      if (tries++ < 120) { setTimeout(waitFor, 100); return; }
+      if (!mapsReady && !mapsDiag) { mapsDiag = "Maps 로드 시간초과 — API 사용설정/키 확인"; updateEngine(); }
+    })();
   }
   function placeSearch(q) { if (mapsReady) googleAuto(q); else photonSearch(q); }
 
