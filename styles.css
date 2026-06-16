@@ -16,8 +16,9 @@
   --sans:'Noto Sans KR','Noto Sans JP',-apple-system,BlinkMacSystemFont,sans-serif;
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{height:100%}
+html,body{min-height:100%}
 body{background:var(--page);font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+body.sheet-open{overflow:hidden}
 ::-webkit-scrollbar{width:0;height:0}
 a{color:inherit;text-decoration:none}
 input{font-family:inherit}
@@ -25,11 +26,11 @@ input{font-family:inherit}
 @keyframes dcslide{from{transform:translateY(100%)}to{transform:translateY(0)}}
 
 #app{
-  width:100%;max-width:430px;min-height:100%;margin:0 auto;background:var(--bg);
-  color:var(--ink);position:relative;overflow:hidden;display:flex;flex-direction:column;
+  width:100%;max-width:430px;margin:0 auto;background:var(--bg);
+  color:var(--ink);position:relative;overflow-x:clip;
   min-height:100vh;min-height:100dvh;
 }
-#scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;position:relative}
+#scroll{padding-bottom:calc(66px + env(safe-area-inset-bottom))}
 
 /* ===== 공통 섹션 헤더 ===== */
 .sec{padding-bottom:30px}
@@ -248,7 +249,8 @@ input{font-family:inherit}
 .logout{margin:20px 0 4px;font-size:12px;color:var(--muted);background:none;border:none;text-decoration:underline;cursor:pointer}
 
 /* ===== 하단 탭 ===== */
-nav{display:flex;background:rgba(244,238,226,0.97);border-top:1px solid rgba(40,33,26,0.1);
+nav{position:fixed;bottom:0;left:0;right:0;margin:0 auto;max-width:430px;z-index:500;
+  display:flex;background:rgba(244,238,226,0.97);border-top:1px solid rgba(40,33,26,0.1);
   backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding-bottom:env(safe-area-inset-bottom)}
 .navbtn{flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:5px;padding:10px 0 12px;cursor:pointer;color:var(--muted)}
@@ -263,10 +265,11 @@ nav{display:flex;background:rgba(244,238,226,0.97);border-top:1px solid rgba(40,
 .ic .square{width:15px;height:15px;border:2px solid currentColor;border-radius:4px}
 
 /* ===== 장소 상세 시트 ===== */
-.overlay{position:absolute;inset:0;z-index:60}
+.overlay{position:fixed;inset:0;z-index:600}
 .scrim{position:absolute;inset:0;background:rgba(24,18,12,.45);animation:dcfade .2s ease}
-.sheet{position:absolute;left:0;right:0;bottom:0;max-width:430px;margin:0 auto;height:88%;background:#f4eee2;
-  border-radius:26px 26px 0 0;overflow-y:auto;animation:dcslide .3s cubic-bezier(.22,1,.36,1);box-shadow:0 -12px 44px rgba(24,18,12,.25)}
+.sheet{position:fixed;left:0;right:0;bottom:0;max-width:430px;margin:0 auto;height:86%;background:#f4eee2;
+  border-radius:26px 26px 0 0;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  animation:dcslide .3s cubic-bezier(.22,1,.36,1);box-shadow:0 -12px 44px rgba(24,18,12,.25);will-change:transform}
 .sheet .grab{position:sticky;top:0;display:flex;justify-content:center;padding:10px 0 0;z-index:1}
 .sheet .grab i{width:42px;height:5px;border-radius:3px;background:rgba(40,33,26,.18)}
 .sheet .x{position:absolute;top:14px;right:16px;width:32px;height:32px;border-radius:50%;background:rgba(40,33,26,.07);

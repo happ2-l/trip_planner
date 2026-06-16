@@ -390,17 +390,27 @@
   }
 
   /* ===== 장소 상세 시트 ===== */
-  function renderSheet() {
-    var host = $("#sheet");
-    if (!selected) { host.innerHTML = ""; return; }
-    var p = getPlace(selected);
-    if (!p) { host.innerHTML = ""; return; }
+  var sheetRenderedId = null;
+  function voteChips(p) {
     var P = people(), w = DB.get("wishes/" + p.id) || {};
-    var votes = P.map(function (per) {
+    return P.map(function (per) {
       var on = !!w[per.id];
       return '<div class="vote ' + (on ? "on" : "") + '" data-vote="' + p.id + ":" + per.id + '" style="' + (on ? "background:" + per.color : "") + '">' +
         '<div class="va" style="background:' + per.color + '">' + esc(per.ini) + '</div><span class="vn">' + esc(per.name) + '</span></div>';
     }).join("");
+  }
+  function renderSheet() {
+    var host = $("#sheet");
+    if (!selected) { host.innerHTML = ""; sheetRenderedId = null; document.body.classList.remove("sheet-open"); return; }
+    var p = getPlace(selected);
+    if (!p) { host.innerHTML = ""; sheetRenderedId = null; document.body.classList.remove("sheet-open"); return; }
+    document.body.classList.add("sheet-open");
+    // 같은 장소면 투표 칩만 갱신(슬라이드 애니메이션 재생 방지 → 투표 즉각 반응)
+    if (sheetRenderedId === selected && host.querySelector(".sheet")) {
+      var vc = host.querySelector(".votes"); if (vc) vc.innerHTML = voteChips(p);
+      return;
+    }
+    sheetRenderedId = selected;
     host.innerHTML =
       '<div class="overlay"><div class="scrim" data-close="1"></div>' +
         '<div class="sheet"><div class="grab"><i></i></div><div class="x" data-close="1">✕</div>' +
@@ -411,9 +421,43 @@
             (p.hours ? '<div class="hours"><b>영업</b><span>' + esc(p.hours) + '</span></div>' : '') +
             '<div class="div"></div>' + (p.note ? '<div class="note">' + esc(p.note) + '</div>' : '') +
             (p.tip ? '<div class="tip"><b>TIP</b><span>' + esc(p.tip) + '</span></div>' : '') +
-            '<div class="votetitle">이 코스, 가고 싶어요?</div><div class="votes">' + votes + '</div>' +
+            '<div class="votetitle">이 코스, 가고 싶어요?</div><div class="votes">' + voteChips(p) + '</div>' +
             '<a class="openmap" target="_blank" rel="noopener" href="' + mapLink(p.mapq || p.name) + '"><span class="d"></span>구글 지도에서 열기</a>' +
           '</div></div></div>';
+    var sh = host.querySelector(".sheet"); if (sh) attachSheetDrag(sh);
+  }
+
+  /* 시트 열기/닫기 + 뒤로가기(History) + 아래로 스와이프 닫기 */
+  function openSheet(id) {
+    if (!id) return;
+    selected = id;
+    try { history.pushState({ sheet: id }, ""); } catch (e) {}
+    renderSheet();
+  }
+  function closeSheet(fromPop) {
+    if (!selected) return;
+    selected = null; renderSheet();
+    if (!fromPop) { try { history.back(); } catch (e) {} }
+  }
+  window.addEventListener("popstate", function () { if (selected) closeSheet(true); });
+
+  function attachSheetDrag(el) {
+    var startY = 0, cur = 0, dragging = false;
+    el.addEventListener("touchstart", function (e) {
+      if (el.scrollTop > 0) { dragging = false; return; }
+      startY = e.touches[0].clientY; cur = 0; dragging = true; el.style.transition = "none";
+    }, { passive: true });
+    el.addEventListener("touchmove", function (e) {
+      if (!dragging) return;
+      cur = e.touches[0].clientY - startY;
+      if (cur > 0) { e.preventDefault(); el.style.transform = "translateY(" + cur + "px)"; }
+    }, { passive: false });
+    el.addEventListener("touchend", function () {
+      if (!dragging) return; dragging = false; el.style.transition = "";
+      if (cur > 110) { el.style.transform = "translateY(100%)"; closeSheet(false); }
+      else { el.style.transform = ""; }
+      cur = 0;
+    });
   }
 
   /* ---------- Leaflet 지도 ---------- */
@@ -435,7 +479,7 @@
       var p = o.p; if (p.lat == null) return;
       var icon = L.divIcon({ className: "pin", html: '<div class="pinmark"><span>' + o.num + '</span></div>', iconSize: [27, 27], iconAnchor: [13, 27], popupAnchor: [0, -26] });
       var m = L.marker([p.lat, p.lng], { icon: icon }).addTo(map);
-      m.on("click", function () { selected = p.id; renderSheet(); });
+      m.on("click", function () { openSheet(p.id); });
       m.bindTooltip(o.num + ". " + p.name, { direction: "top", offset: [0, -24] });
       markers.push(m);
       if (o.seg.key !== "trip") pts.push([p.lat, p.lng]);  // 도쿄 군집 기준으로 화면 맞춤
@@ -473,19 +517,19 @@
     var nav = t.closest(".navbtn");
     var ed = t.closest(".editable");
     if (ed) { startEdit(ed); return; }
-    if (nav) { armed = null; tab = nav.dataset.tab; selected = null; render(); $("#scroll").scrollTop = 0; return; }
+    if (nav) { armed = null; tab = nav.dataset.tab; selected = null; render(); window.scrollTo(0, 0); return; }
     var dc = t.closest("[data-day]"); if (dc) { armed = null; dayIdx = +dc.dataset.day; render(); return; }
     var sg = t.closest("[data-seg]"); if (sg) { armed = null; seg = sg.dataset.seg; render(); return; }
     var dts = t.closest("[data-daytrip]"); if (dts) { armed = null; DB.set("daytrip", dts.dataset.daytrip); return; }
     var cu = t.closest("[data-cur]"); if (cu) { armed = null; DB.set("budgetCur", cu.dataset.cur); return; }
     if (t.dataset.logout) { if (window.firebase && firebase.auth) firebase.auth().signOut(); return; }
-    if (t.closest("[data-close]")) { selected = null; renderSheet(); return; }
+    if (t.closest("[data-close]")) { closeSheet(false); return; }
     if (t.dataset.delplace) { var dpv = t.dataset.delplace; armOrRun("delplace:" + dpv, function () { DB.remove("uplaces/" + dpv); }); return; }
     if (t.dataset.hideplace) { var hpv = t.dataset.hideplace; armOrRun("hideplace:" + hpv, function () { DB.set("phidden/" + hpv, true); }); return; }
-    var pl = t.closest("[data-place]"); if (pl) { selected = pl.dataset.place; renderSheet(); return; }
-    if (t.dataset.vote) { var v = t.dataset.vote.split(":"); DB.set("wishes/" + v[0] + "/" + v[1], !DB.get("wishes/" + v[0] + "/" + v[1])); return; }
+    var pl = t.closest("[data-place]"); if (pl) { openSheet(pl.dataset.place); return; }
+    var vv = t.closest("[data-vote]"); if (vv) { var v = vv.dataset.vote.split(":"); DB.set("wishes/" + v[0] + "/" + v[1], !DB.get("wishes/" + v[0] + "/" + v[1])); return; }
     if (t.dataset.toggle) { DB.set(t.dataset.toggle, !DB.get(t.dataset.toggle)); return; }
-    if (t.dataset.check) { DB.set("checks/" + t.dataset.check, !DB.get("checks/" + t.dataset.check)); return; }
+    var cck = t.closest("[data-check]"); if (cck) { DB.set("checks/" + cck.dataset.check, !DB.get("checks/" + cck.dataset.check)); return; }
     if (t.dataset.deldef) { var ddv = t.dataset.deldef; armOrRun("deldef:" + ddv, function () { DB.set(ddv + "/deleted", true); }); return; }
     if (t.dataset.del) { var dv = t.dataset.del; armOrRun("del:" + dv, function () { DB.remove(dv); }); return; }
     if (t.dataset.payer) { cyclePayer(t.dataset.payer); return; }
