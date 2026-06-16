@@ -128,7 +128,8 @@
     return Object.keys(o).map(function (id) {
       var c = o[id] || {};
       return { id: id, name: c.name || "새 장소", jp: c.jp || "", area: c.area || "", cat: c.cat || "",
-        hours: "", note: "", tip: "", mapq: c.mapq || c.name || "", list: c.seg, trip: c.trip || null, custom: true };
+        hours: "", note: "", tip: "", mapq: c.mapq || c.name || "", list: c.seg, trip: c.trip || null,
+        lat: (c.lat != null ? c.lat : null), lng: (c.lng != null ? c.lng : null), custom: true };
     });
   }
   function getPlace(id) {
@@ -136,6 +137,55 @@
     var cp = customPlaces();
     for (var i = 0; i < cp.length; i++) if (cp[i].id === id) return cp[i];
     return null;
+  }
+
+  /* ---------- 장소 검색(OSM/Photon) ---------- */
+  var searchTimer = null, lastResults = [];
+  function catKo(v) {
+    var m = { cafe: "카페", restaurant: "음식점", bar: "바", pub: "펍", fast_food: "음식점", bakery: "베이커리",
+      confectionery: "디저트", ice_cream: "디저트", clothes: "패션", boutique: "패션", books: "서점",
+      department_store: "백화점", mall: "쇼핑몰", supermarket: "마트", convenience: "편의점", hotel: "호텔",
+      attraction: "명소", museum: "박물관", park: "공원", viewpoint: "전망", shop: "상점", hairdresser: "" };
+    return m[v] || (v || "");
+  }
+  function photonSearch(q) {
+    var box = document.getElementById("plresults"); if (!box) return;
+    box.innerHTML = '<div class="plres plres-info">검색 중…</div>';
+    fetch("https://photon.komoot.io/api/?q=" + encodeURIComponent(q) + "&limit=6&lang=en&lat=35.68&lon=139.76")
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        lastResults = (d.features || []).map(function (f) {
+          var p = f.properties || {}, c = (f.geometry || {}).coordinates || [];
+          return { name: p.name || p.street || q, area: p.district || p.suburb || p.city || p.state || "",
+            cat: catKo(p.osm_value), lat: c[1], lng: c[0], city: p.city || "" };
+        });
+        renderResults(q);
+      })
+      .catch(function () { if (box) box.innerHTML = '<div class="plres plres-info">검색 실패 — 잠시 후 다시 시도하거나 그대로 추가하세요</div>'; });
+  }
+  function renderResults(q) {
+    var box = document.getElementById("plresults"); if (!box) return;
+    var rows = lastResults.map(function (r, i) {
+      var meta = [r.cat, r.area, r.city].filter(Boolean).join(" · ");
+      return '<div class="plres" data-ridx="' + i + '"><div class="plres-nm">' + esc(r.name) + '</div>' +
+        (meta ? '<div class="plres-meta">' + esc(meta) + '</div>' : "") + '</div>';
+    }).join("");
+    rows += '<div class="plres plres-manual" data-manual="1">‘' + esc(q) + '’ 그대로 추가</div>';
+    box.innerHTML = rows;
+  }
+  function addPlaceFromResult(r) {
+    if (!r) return;
+    var rec = { name: r.name, area: r.area || "", cat: r.cat || "", seg: seg, mapq: (r.name + " " + (r.city || r.area || "")).trim() };
+    if (r.lat != null && r.lng != null) { rec.lat = r.lat; rec.lng = r.lng; }
+    if (seg === "trip") rec.trip = tripKey();
+    DB.push("uplaces", rec);
+  }
+  function addPlaceManual() {
+    var el = document.getElementById("plsearch"); var q = el ? (el.value || "").trim() : "";
+    if (!q) return;
+    var rec = { name: q, seg: seg, mapq: q };
+    if (seg === "trip") rec.trip = tripKey();
+    DB.push("uplaces", rec);
   }
 
   /* ---------- UI 상태 ---------- */
@@ -240,6 +290,9 @@
         ? window.PLACES.filter(function (p) { return p.trip === at && !DB.get("phidden/" + p.id); })
         : window.PLACES.filter(function (p) { return p.list === s.key && !DB.get("phidden/" + p.id); });
       arr.forEach(function (p) { out.push({ p: p, seg: s }); });
+      customPlaces().filter(function (c) {
+        return c.lat != null && (s.key === "trip" ? (c.list === "trip" && (!c.trip || c.trip === at)) : c.list === s.key);
+      }).forEach(function (c) { out.push({ p: c, seg: s }); });
     });
     out.forEach(function (o, i) { o.num = i + 1; });
     return out;
@@ -288,7 +341,7 @@
     var segs = (window.SEGMENTS || []).map(function (s) {
       return '<div class="opt ' + (seg === s.key ? "on" : "") + '" data-seg="' + s.key + '">' + esc(s.label) + '</div>';
     }).join("");
-    var addf = '<div class="placeadd"><input id="plname" placeholder="장소 이름 추가"><input id="plarea" placeholder="지역(선택)"><input id="plcat" placeholder="분류(선택)"><button id="pladd">추가</button></div>';
+    var addf = '<div class="placeadd2"><input id="plsearch" placeholder="🔎 가게·장소 검색해서 추가 (예: Fuglen Tokyo)" autocomplete="off"><div id="plresults" class="plresults"></div></div>';
     return '<div class="sec">' +
       '<div class="sechead"><div class="eyebrow">PLACES</div><div class="sectitle"><div class="kr">가볼 곳</div><div class="jp">名店</div></div></div>' +
       '<div class="seg">' + segs + '</div>' +
@@ -538,7 +591,7 @@
     if (t.dataset.newcur) { newCur = t.dataset.newcur; render(); return; }
     if (t.id === "addbtn") { var ti = $("#newtime").value.trim(), tt = $("#newtitle").value.trim(); if (tt) DB.push("custom/" + window.DAYS[dayIdx].key, { time: ti, title: tt }); return; }
     if (t.id === "expadd") { var lbl = $("#explbl").value.trim(), amt = Number($("#expamt").value.replace(/[^0-9.]/g, "")) || 0; if (lbl && amt) { DB.push("expenses", { label: lbl, payer: newPayer, amount: amt, cur: newCur }); } return; }
-    if (t.id === "pladd") { var nm = $("#plname").value.trim(); if (nm) { var rec = { name: nm, area: $("#plarea").value.trim(), cat: $("#plcat").value.trim(), seg: seg, mapq: nm }; if (seg === "trip") rec.trip = tripKey(); DB.push("uplaces", rec); } return; }
+    var pr = t.closest(".plres"); if (pr) { if (pr.dataset.manual) addPlaceManual(); else addPlaceFromResult(lastResults[+pr.dataset.ridx]); return; }
   });
 
   function cyclePayer(k) {
@@ -548,11 +601,18 @@
   }
 
   document.addEventListener("change", function (e) { if (e.target.dataset && e.target.dataset.memo !== undefined) DB.set(e.target.dataset.memo, e.target.value); });
+  document.addEventListener("input", function (e) {
+    if (e.target.id !== "plsearch") return;
+    var q = (e.target.value || "").trim();
+    if (searchTimer) clearTimeout(searchTimer);
+    if (q.length < 2) { var box = document.getElementById("plresults"); if (box) box.innerHTML = ""; return; }
+    searchTimer = setTimeout(function () { photonSearch(q); }, 320);
+  });
   document.addEventListener("keydown", function (e) {
     if (e.key !== "Enter") return;
     if (e.target.id === "newtitle" || e.target.id === "newtime") $("#addbtn").click();
     if (e.target.id === "explbl" || e.target.id === "expamt") $("#expadd").click();
-    if (e.target.id === "plname" || e.target.id === "plarea" || e.target.id === "plcat") $("#pladd").click();
+    if (e.target.id === "plsearch") { e.preventDefault(); addPlaceManual(); }
   });
 
   /* ---------- 시작 ---------- */

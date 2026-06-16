@@ -141,6 +141,18 @@ input{font-family:inherit}
 .pdel.armed{width:auto;padding:0 9px;border-radius:12px;background:var(--red);font-size:11px;font-weight:700}
 .del.armed{color:#fff;background:var(--red);border-radius:9px;padding:3px 9px;font-size:12px;font-weight:700}
 .act.armed{color:var(--red);font-weight:800;text-decoration:underline}
+.placeadd2{margin:16px 22px 0}
+#plsearch{width:100%;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:15px;color:var(--ink)}
+#plsearch:focus{outline:none;border-color:var(--red)}
+.plresults{margin-top:8px}
+.plres{padding:11px 13px;background:var(--card);border:1px solid var(--line);border-top:none;cursor:pointer}
+.plres:first-child{border-top:1px solid var(--line);border-radius:12px 12px 0 0}
+.plres:last-child{border-radius:0 0 12px 12px}
+.plres:active{background:var(--card2)}
+.plres-nm{font-family:var(--serif);font-size:15px;color:var(--ink)}
+.plres-meta{font-size:12px;color:var(--muted);margin-top:2px}
+.plres-manual{color:var(--red);font-weight:600}
+.plres-info{color:var(--muted);font-size:13px;cursor:default}
 .placeadd{display:flex;flex-wrap:wrap;gap:8px;margin:16px 22px 0}
 .placeadd input{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:10px 12px;font-size:14px;color:var(--ink)}
 .placeadd #plname{flex:1;min-width:140px}
