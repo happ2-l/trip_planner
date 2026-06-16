@@ -129,7 +129,7 @@
       var c = o[id] || {};
       return { id: id, name: c.name || "새 장소", jp: c.jp || "", area: c.area || "", cat: c.cat || "",
         hours: "", note: "", tip: "", mapq: c.mapq || c.name || "", list: c.seg, trip: c.trip || null,
-        lat: (c.lat != null ? c.lat : null), lng: (c.lng != null ? c.lng : null), custom: true };
+        lat: (c.lat != null ? c.lat : null), lng: (c.lng != null ? c.lng : null), img: c.img || null, custom: true };
     });
   }
   function getPlace(id) {
@@ -148,6 +148,17 @@
       attraction: "명소", museum: "박물관", park: "공원", viewpoint: "전망", shop: "상점", hairdresser: "" };
     return m[v] || (v || "");
   }
+  function catKey(v) {
+    var m = { cafe: "cafe", coffee: "cafe", restaurant: "restaurant", food_court: "restaurant", fast_food: "restaurant",
+      bar: "bar", pub: "bar", biergarten: "bar", bakery: "bakery", pastry: "bakery",
+      confectionery: "dessert", ice_cream: "dessert", clothes: "shopping", boutique: "shopping", shoes: "shopping",
+      jewelry: "shopping", bag: "shopping", variety_store: "shopping", mall: "shopping", department_store: "shopping",
+      shop: "shopping", marketplace: "shopping", supermarket: "store", convenience: "store", kiosk: "store",
+      hotel: "hotel", hostel: "hotel", guest_house: "hotel", attraction: "landmark", museum: "landmark",
+      gallery: "landmark", artwork: "landmark", viewpoint: "landmark", monument: "landmark", memorial: "landmark",
+      temple: "landmark", shrine: "landmark", place_of_worship: "landmark", park: "park", garden: "park" };
+    return m[v] || "default";
+  }
   function photonSearch(q) {
     var box = document.getElementById("plresults"); if (!box) return;
     box.innerHTML = '<div class="plres plres-info">검색 중…</div>';
@@ -157,7 +168,7 @@
         lastResults = (d.features || []).map(function (f) {
           var p = f.properties || {}, c = (f.geometry || {}).coordinates || [];
           return { name: p.name || p.street || q, area: p.district || p.suburb || p.city || p.state || "",
-            cat: catKo(p.osm_value), lat: c[1], lng: c[0], city: p.city || "" };
+            cat: catKo(p.osm_value), key: catKey(p.osm_value), lat: c[1], lng: c[0], city: p.city || "" };
         });
         renderResults(q);
       })
@@ -175,7 +186,7 @@
   }
   function addPlaceFromResult(r) {
     if (!r) return;
-    var rec = { name: r.name, area: r.area || "", cat: r.cat || "", seg: seg, mapq: (r.name + " " + (r.city || r.area || "")).trim() };
+    var rec = { name: r.name, area: r.area || "", cat: r.cat || "", seg: seg, mapq: (r.name + " " + (r.city || r.area || "")).trim(), img: "images/cat/" + (r.key || "default") + ".jpg" };
     if (r.lat != null && r.lng != null) { rec.lat = r.lat; rec.lng = r.lng; }
     if (seg === "trip") rec.trip = tripKey();
     DB.push("uplaces", rec);
@@ -183,7 +194,7 @@
   function addPlaceManual() {
     var el = document.getElementById("plsearch"); var q = el ? (el.value || "").trim() : "";
     if (!q) return;
-    var rec = { name: q, seg: seg, mapq: q };
+    var rec = { name: q, seg: seg, mapq: q, img: "images/cat/default.jpg" };
     if (seg === "trip") rec.trip = tripKey();
     DB.push("uplaces", rec);
   }
@@ -331,7 +342,7 @@
       var del = p.custom
         ? '<button class="pdel' + (don ? " armed" : "") + '" data-delplace="' + p.id + '" title="삭제">' + (don ? "삭제?" : "✕") + '</button>'
         : '<button class="pdel' + (don ? " armed" : "") + '" data-hideplace="' + p.id + '" title="숨기기">' + (don ? "숨길까?" : "✕") + '</button>';
-      return '<div class="pcard" data-place="' + p.id + '"><div class="ph"><img class="phimg" src="images/' + p.id + '.jpg" alt="" loading="lazy" onerror="this.remove()"><span>사진</span>' + del + '</div>' +
+      return '<div class="pcard" data-place="' + p.id + '"><div class="ph"><img class="phimg" src="' + (p.img || ("images/" + p.id + ".jpg")) + '" alt="" loading="lazy" onerror="this.remove()"><span>사진</span>' + del + '</div>' +
         '<div class="pb"><div class="nm">' + esc(p.name) + '</div>' + (p.jp ? '<div class="jp">' + esc(p.jp) + '</div>' : '') +
         '<div class="row"><span class="area">' + esc(p.area || "") + '</span>' + (p.cat ? '<span class="ddot"></span><span class="cat">' + esc(p.cat) + '</span>' : "") + '</div>' +
         (rateHtml(p.id) ? '<div class="prate">' + rateHtml(p.id) + '</div>' : "") +
@@ -467,7 +478,7 @@
     host.innerHTML =
       '<div class="overlay"><div class="scrim" data-close="1"></div>' +
         '<div class="sheet"><div class="grab"><i></i></div><div class="x" data-close="1">✕</div>' +
-          '<div class="hero"><img class="heroimg" src="images/' + p.id + '.jpg" alt="" onerror="this.remove()"><span>사진 · PLACEHOLDER</span></div>' +
+          '<div class="hero"><img class="heroimg" src="' + (p.img || ("images/" + p.id + ".jpg")) + '" alt="" onerror="this.remove()"><span>사진 · PLACEHOLDER</span></div>' +
           '<div class="sb"><div class="name">' + esc(p.name) + '</div><div class="jp">' + esc(p.jp) + '</div>' +
             '<div class="chips"><span class="chip red">' + esc(p.area) + '</span><span class="chip gray">' + esc(p.cat) + '</span></div>' +
             (rateHtml(p.id) ? '<div class="hours"><b style="color:#a9772e">평점</b><span>' + rateHtml(p.id) + ' · 구글</span></div>' : '') +
