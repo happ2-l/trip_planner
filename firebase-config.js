@@ -17,3 +17,7 @@ window.FIREBASE_CONFIG = {
 
 // 우리만 아는 방 이름 (친구 3명 모두 이 값으로 같은 일정 공유)
 window.TRIP_ID = "tokyo2026-happ2-x9f2k7";
+
+// (선택) 구글 플레이스 검색·실사진·평점용 키. 비워두면 무료 OSM 검색 사용.
+// 도메인 제한(referrer)을 happ2-l.github.io 로 걸어야 안전합니다.
+window.MAPS_API_KEY = "PASTE_MAPS_KEY";

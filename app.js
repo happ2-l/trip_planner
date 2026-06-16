@@ -112,6 +112,12 @@
     var n = r.reviews != null ? ' <span class="rn">(' + num(r.reviews) + ')</span>' : "";
     return '<span class="' + (cls || "rate") + '">★ ' + r.rating + n + "</span>";
   }
+  function rateHtmlFor(p, cls) {
+    var r = (p && p.rating != null) ? { rating: p.rating, reviews: p.reviews } : rateOf(p && p.id);
+    if (!r || r.rating == null) return "";
+    var n = r.reviews != null ? ' <span class="rn">(' + num(r.reviews) + ')</span>' : "";
+    return '<span class="' + (cls || "rate") + '">★ ' + r.rating + n + "</span>";
+  }
   function pick(v, d) { return v != null ? v : d; }
   function $(sel, root) { return (root || document).querySelector(sel); }
 
@@ -129,7 +135,9 @@
       var c = o[id] || {};
       return { id: id, name: c.name || "새 장소", jp: c.jp || "", area: c.area || "", cat: c.cat || "",
         hours: "", note: "", tip: "", mapq: c.mapq || c.name || "", list: c.seg, trip: c.trip || null,
-        lat: (c.lat != null ? c.lat : null), lng: (c.lng != null ? c.lng : null), img: c.img || null, custom: true };
+        lat: (c.lat != null ? c.lat : null), lng: (c.lng != null ? c.lng : null),
+        img: c.img || null, catimg: c.catimg || null,
+        rating: (c.rating != null ? c.rating : null), reviews: (c.reviews != null ? c.reviews : null), custom: true };
     });
   }
   function getPlace(id) {
@@ -139,15 +147,83 @@
     return null;
   }
 
-  /* ---------- 장소 검색(OSM/Photon) ---------- */
-  var searchTimer = null, lastResults = [];
+  /* ---------- 장소 검색 (구글 플레이스 우선, 없으면 OSM/Photon) ---------- */
+  var searchTimer = null, lastResults = [], mapsReady = false;
+  function initMaps() {
+    var key = window.MAPS_API_KEY;
+    if (!key || key.indexOf("PASTE") !== -1) return;  // 키 없으면 OSM 사용
+    if (window.google && window.google.maps) { mapsReady = true; return; }
+    var s = document.createElement("script");
+    s.src = "https://maps.googleapis.com/maps/api/js?key=" + encodeURIComponent(key) + "&v=weekly&libraries=places&loading=async";
+    s.async = true;
+    s.onload = function () {
+      if (window.google && google.maps && google.maps.importLibrary)
+        google.maps.importLibrary("places").then(function () { mapsReady = true; }).catch(function (e) { console.warn("Places 로드 실패:", e); });
+    };
+    s.onerror = function () { console.warn("Maps JS 로드 실패 — OSM 검색 사용"); };
+    document.head.appendChild(s);
+  }
+  function placeSearch(q) { if (mapsReady) googleAuto(q); else photonSearch(q); }
+
+  function googleAuto(q) {
+    var box = document.getElementById("plresults"); if (!box) return;
+    box.innerHTML = '<div class="plres plres-info">검색 중…</div>';
+    google.maps.importLibrary("places").then(function (lib) {
+      var token = new lib.AutocompleteSessionToken();
+      return lib.AutocompleteSuggestion.fetchAutocompleteSuggestions({
+        input: q, sessionToken: token, locationBias: { center: { lat: 35.68, lng: 139.76 }, radius: 40000 }
+      });
+    }).then(function (res) {
+      var sugg = (res && res.suggestions) || [];
+      lastResults = sugg.filter(function (s) { return s.placePrediction; }).map(function (s) {
+        var pp = s.placePrediction, sf = pp.structuredFormat || {};
+        return { google: true, placeId: pp.placeId,
+          name: (sf.mainText && sf.mainText.text) || (pp.text && pp.text.text) || q,
+          area: (sf.secondaryText && sf.secondaryText.text) || "" };
+      });
+      renderResults(q);
+    }).catch(function (e) { console.warn("구글 자동완성 실패 → OSM:", e); photonSearch(q); });
+  }
+  function addPlaceFromGoogle(r) {
+    if (!r || !r.placeId) return;
+    var box = document.getElementById("plresults"); if (box) box.innerHTML = '<div class="plres plres-info">불러오는 중…</div>';
+    google.maps.importLibrary("places").then(function (lib) {
+      var place = new lib.Place({ id: r.placeId });
+      return place.fetchFields({ fields: ["displayName", "formattedAddress", "location", "rating", "userRatingCount", "photos", "types"] }).then(function () { return place; });
+    }).then(function (place) {
+      var photo = (place.photos && place.photos[0]) ? place.photos[0].getURI({ maxWidth: 900 }) : null;
+      var ckey = catKeyFromTypes(place.types);
+      var rec = { name: (place.displayName || r.name), area: shortArea(r.area || place.formattedAddress || ""),
+        cat: catKoFromTypes(place.types), seg: seg,
+        mapq: (place.displayName || r.name) + " " + (place.formattedAddress || ""),
+        lat: place.location ? place.location.lat() : null, lng: place.location ? place.location.lng() : null,
+        rating: (place.rating != null ? place.rating : null), reviews: (place.userRatingCount != null ? place.userRatingCount : null),
+        img: photo || ("images/cat/" + ckey + ".jpg"), catimg: "images/cat/" + ckey + ".jpg" };
+      if (seg === "trip") rec.trip = tripKey();
+      DB.push("uplaces", rec);
+    }).catch(function (e) { console.warn("장소 상세 실패 → 이름만 추가:", e); addNameOnly(r.name); });
+  }
+  function addNameOnly(nm) {
+    nm = (nm || "").trim(); if (!nm) return;
+    var rec = { name: nm, seg: seg, mapq: nm, img: "images/cat/default.jpg" };
+    if (seg === "trip") rec.trip = tripKey();
+    DB.push("uplaces", rec);
+  }
+
   function catKo(v) {
     var m = { cafe: "카페", restaurant: "음식점", bar: "바", pub: "펍", fast_food: "음식점", bakery: "베이커리",
       confectionery: "디저트", ice_cream: "디저트", clothes: "패션", boutique: "패션", books: "서점",
       department_store: "백화점", mall: "쇼핑몰", supermarket: "마트", convenience: "편의점", hotel: "호텔",
-      attraction: "명소", museum: "박물관", park: "공원", viewpoint: "전망", shop: "상점", hairdresser: "" };
+      attraction: "명소", museum: "박물관", park: "공원", viewpoint: "전망", shop: "상점", hairdresser: "",
+      // 구글 장소 타입
+      clothing_store: "패션", shoe_store: "패션", book_store: "서점", shopping_mall: "쇼핑몰",
+      convenience_store: "편의점", lodging: "호텔", tourist_attraction: "명소", store: "상점",
+      meal_takeaway: "음식점", meal_delivery: "음식점", night_club: "바", art_gallery: "갤러리",
+      amusement_park: "명소", supermarket_store: "마트" };
     return m[v] || (v || "");
   }
+  function catKoFromTypes(types) { types = types || []; for (var i = 0; i < types.length; i++) { var k = catKo(types[i]); if (k && k !== types[i]) return k; } return ""; }
+  function shortArea(s) { if (!s) return ""; return ("" + s).split(",").slice(0, 2).join(",").trim(); }
   function catKey(v) {
     var m = { cafe: "cafe", coffee: "cafe", restaurant: "restaurant", food_court: "restaurant", fast_food: "restaurant",
       bar: "bar", pub: "bar", biergarten: "bar", bakery: "bakery", pastry: "bakery",
@@ -156,9 +232,15 @@
       shop: "shopping", marketplace: "shopping", supermarket: "store", convenience: "store", kiosk: "store",
       hotel: "hotel", hostel: "hotel", guest_house: "hotel", attraction: "landmark", museum: "landmark",
       gallery: "landmark", artwork: "landmark", viewpoint: "landmark", monument: "landmark", memorial: "landmark",
-      temple: "landmark", shrine: "landmark", place_of_worship: "landmark", park: "park", garden: "park" };
+      temple: "landmark", shrine: "landmark", place_of_worship: "landmark", park: "park", garden: "park",
+      // 구글 장소 타입
+      clothing_store: "shopping", shoe_store: "shopping", book_store: "shopping", shopping_mall: "shopping",
+      convenience_store: "store", lodging: "hotel", tourist_attraction: "landmark", store: "shopping",
+      meal_takeaway: "restaurant", meal_delivery: "restaurant", night_club: "bar", art_gallery: "landmark",
+      amusement_park: "landmark" };
     return m[v] || "default";
   }
+  function catKeyFromTypes(types) { types = types || []; for (var i = 0; i < types.length; i++) { var k = catKey(types[i]); if (k !== "default") return k; } return "default"; }
   function photonSearch(q) {
     var box = document.getElementById("plresults"); if (!box) return;
     box.innerHTML = '<div class="plres plres-info">검색 중…</div>';
@@ -314,7 +396,7 @@
     var listHtml = "", curseg = null;
     _mapList.forEach(function (o) {
       if (o.seg.key !== curseg) { curseg = o.seg.key; listHtml += '<div class="mapgroup">' + esc(o.seg.label) + '</div>'; }
-      var rh = rateHtml(o.p.id, "rate");
+      var rh = rateHtmlFor(o.p, "rate");
       listHtml += '<div class="maprow" data-place="' + o.p.id + '"><div class="n">' + o.num + '</div>' +
         '<div style="flex:1;min-width:0"><div class="nm">' + esc(o.p.name) + '</div>' +
         '<div class="meta">' + esc(o.p.area) + (rh ? ' · ' + rh : "") + '</div></div>' +
@@ -342,10 +424,11 @@
       var del = p.custom
         ? '<button class="pdel' + (don ? " armed" : "") + '" data-delplace="' + p.id + '" title="삭제">' + (don ? "삭제?" : "✕") + '</button>'
         : '<button class="pdel' + (don ? " armed" : "") + '" data-hideplace="' + p.id + '" title="숨기기">' + (don ? "숨길까?" : "✕") + '</button>';
-      return '<div class="pcard" data-place="' + p.id + '"><div class="ph"><img class="phimg" src="' + (p.img || ("images/" + p.id + ".jpg")) + '" alt="" loading="lazy" onerror="this.remove()"><span>사진</span>' + del + '</div>' +
+      var fb = p.catimg ? ' data-fb="' + p.catimg + '"' : "";
+      return '<div class="pcard" data-place="' + p.id + '"><div class="ph"><img class="phimg" src="' + (p.img || ("images/" + p.id + ".jpg")) + '"' + fb + ' alt="" loading="lazy" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute(\'data-fb\');}else{this.remove();}"><span>사진</span>' + del + '</div>' +
         '<div class="pb"><div class="nm">' + esc(p.name) + '</div>' + (p.jp ? '<div class="jp">' + esc(p.jp) + '</div>' : '') +
         '<div class="row"><span class="area">' + esc(p.area || "") + '</span>' + (p.cat ? '<span class="ddot"></span><span class="cat">' + esc(p.cat) + '</span>' : "") + '</div>' +
-        (rateHtml(p.id) ? '<div class="prate">' + rateHtml(p.id) + '</div>' : "") +
+        (rateHtmlFor(p) ? '<div class="prate">' + rateHtmlFor(p) + '</div>' : "") +
         (avs ? '<div class="wish">' + avs + '</div>' : "") +
         '</div></div>';
     }).join("");
@@ -478,10 +561,10 @@
     host.innerHTML =
       '<div class="overlay"><div class="scrim" data-close="1"></div>' +
         '<div class="sheet"><div class="grab"><i></i></div><div class="x" data-close="1">✕</div>' +
-          '<div class="hero"><img class="heroimg" src="' + (p.img || ("images/" + p.id + ".jpg")) + '" alt="" onerror="this.remove()"><span>사진 · PLACEHOLDER</span></div>' +
+          '<div class="hero"><img class="heroimg" src="' + (p.img || ("images/" + p.id + ".jpg")) + '"' + (p.catimg ? ' data-fb="' + p.catimg + '"' : "") + ' alt="" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute(\'data-fb\');}else{this.remove();}"><span>사진 · PLACEHOLDER</span></div>' +
           '<div class="sb"><div class="name">' + esc(p.name) + '</div><div class="jp">' + esc(p.jp) + '</div>' +
-            '<div class="chips"><span class="chip red">' + esc(p.area) + '</span><span class="chip gray">' + esc(p.cat) + '</span></div>' +
-            (rateHtml(p.id) ? '<div class="hours"><b style="color:#a9772e">평점</b><span>' + rateHtml(p.id) + ' · 구글</span></div>' : '') +
+            '<div class="chips"><span class="chip red">' + esc(p.area) + '</span>' + (p.cat ? '<span class="chip gray">' + esc(p.cat) + '</span>' : "") + '</div>' +
+            (rateHtmlFor(p) ? '<div class="hours"><b style="color:#a9772e">평점</b><span>' + rateHtmlFor(p) + ' · 구글</span></div>' : '') +
             (p.hours ? '<div class="hours"><b>영업</b><span>' + esc(p.hours) + '</span></div>' : '') +
             '<div class="div"></div>' + (p.note ? '<div class="note">' + esc(p.note) + '</div>' : '') +
             (p.tip ? '<div class="tip"><b>TIP</b><span>' + esc(p.tip) + '</span></div>' : '') +
@@ -602,7 +685,7 @@
     if (t.dataset.newcur) { newCur = t.dataset.newcur; render(); return; }
     if (t.id === "addbtn") { var ti = $("#newtime").value.trim(), tt = $("#newtitle").value.trim(); if (tt) DB.push("custom/" + window.DAYS[dayIdx].key, { time: ti, title: tt }); return; }
     if (t.id === "expadd") { var lbl = $("#explbl").value.trim(), amt = Number($("#expamt").value.replace(/[^0-9.]/g, "")) || 0; if (lbl && amt) { DB.push("expenses", { label: lbl, payer: newPayer, amount: amt, cur: newCur }); } return; }
-    var pr = t.closest(".plres"); if (pr) { if (pr.dataset.manual) addPlaceManual(); else addPlaceFromResult(lastResults[+pr.dataset.ridx]); return; }
+    var pr = t.closest(".plres"); if (pr) { if (pr.dataset.manual) addPlaceManual(); else { var rr = lastResults[+pr.dataset.ridx]; if (rr && rr.google) addPlaceFromGoogle(rr); else addPlaceFromResult(rr); } return; }
   });
 
   function cyclePayer(k) {
@@ -617,7 +700,7 @@
     var q = (e.target.value || "").trim();
     if (searchTimer) clearTimeout(searchTimer);
     if (q.length < 2) { var box = document.getElementById("plresults"); if (box) box.innerHTML = ""; return; }
-    searchTimer = setTimeout(function () { photonSearch(q); }, 320);
+    searchTimer = setTimeout(function () { placeSearch(q); }, 320);
   });
   document.addEventListener("keydown", function (e) {
     if (e.key !== "Enter") return;
@@ -629,6 +712,7 @@
   /* ---------- 시작 ---------- */
   DB.onChange(function () { render(); });
   initSync();
+  initMaps();
   render();
 
   if ("serviceWorker" in navigator) window.addEventListener("load", function () { navigator.serviceWorker.register("./sw.js").catch(function () {}); });
