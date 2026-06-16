@@ -112,6 +112,11 @@
     var n = r.reviews != null ? ' <span class="rn">(' + num(r.reviews) + ')</span>' : "";
     return '<span class="' + (cls || "rate") + '">★ ' + r.rating + n + "</span>";
   }
+  function placeImg(p) {
+    if (p && p.img) return p.img;
+    if (p && p.custom) return "images/cat/default.jpg";   // 사진 없는 직접추가 장소
+    return "images/" + (p && p.id) + ".jpg";              // 큐레이션 장소
+  }
   function rateHtmlFor(p, cls) {
     var r = (p && p.rating != null) ? { rating: p.rating, reviews: p.reviews } : rateOf(p && p.id);
     if (!r || r.rating == null) return "";
@@ -424,8 +429,8 @@
       var del = p.custom
         ? '<button class="pdel' + (don ? " armed" : "") + '" data-delplace="' + p.id + '" title="삭제">' + (don ? "삭제?" : "✕") + '</button>'
         : '<button class="pdel' + (don ? " armed" : "") + '" data-hideplace="' + p.id + '" title="숨기기">' + (don ? "숨길까?" : "✕") + '</button>';
-      var fb = p.catimg ? ' data-fb="' + p.catimg + '"' : "";
-      return '<div class="pcard" data-place="' + p.id + '"><div class="ph"><img class="phimg" src="' + (p.img || ("images/" + p.id + ".jpg")) + '"' + fb + ' alt="" loading="lazy" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute(\'data-fb\');}else{this.remove();}"><span>사진</span>' + del + '</div>' +
+      var fb = ' data-fb="' + (p.catimg || "images/cat/default.jpg") + '"';
+      return '<div class="pcard" data-place="' + p.id + '"><div class="ph"><img class="phimg" src="' + placeImg(p) + '"' + fb + ' alt="" loading="lazy" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute(\'data-fb\');}else{this.remove();}"><span>사진</span>' + del + '</div>' +
         '<div class="pb"><div class="nm">' + esc(p.name) + '</div>' + (p.jp ? '<div class="jp">' + esc(p.jp) + '</div>' : '') +
         '<div class="row"><span class="area">' + esc(p.area || "") + '</span>' + (p.cat ? '<span class="ddot"></span><span class="cat">' + esc(p.cat) + '</span>' : "") + '</div>' +
         (rateHtmlFor(p) ? '<div class="prate">' + rateHtmlFor(p) + '</div>' : "") +
@@ -561,7 +566,7 @@
     host.innerHTML =
       '<div class="overlay"><div class="scrim" data-close="1"></div>' +
         '<div class="sheet"><div class="grab"><i></i></div><div class="x" data-close="1">✕</div>' +
-          '<div class="hero"><img class="heroimg" src="' + (p.img || ("images/" + p.id + ".jpg")) + '"' + (p.catimg ? ' data-fb="' + p.catimg + '"' : "") + ' alt="" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute(\'data-fb\');}else{this.remove();}"><span>사진 · PLACEHOLDER</span></div>' +
+          '<div class="hero"><img class="heroimg" src="' + placeImg(p) + '" data-fb="' + (p.catimg || "images/cat/default.jpg") + '" alt="" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute(\'data-fb\');}else{this.remove();}"><span>사진 · PLACEHOLDER</span></div>' +
           '<div class="sb"><div class="name">' + esc(p.name) + '</div><div class="jp">' + esc(p.jp) + '</div>' +
             '<div class="chips"><span class="chip red">' + esc(p.area) + '</span>' + (p.cat ? '<span class="chip gray">' + esc(p.cat) + '</span>' : "") + '</div>' +
             (rateHtmlFor(p) ? '<div class="hours"><b style="color:#a9772e">평점</b><span>' + rateHtmlFor(p) + ' · 구글</span></div>' : '') +
