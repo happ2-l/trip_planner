@@ -735,5 +735,14 @@
   initMaps();
   render();
 
-  if ("serviceWorker" in navigator) window.addEventListener("load", function () { navigator.serviceWorker.register("./sw.js").catch(function () {}); });
+  if ("serviceWorker" in navigator) window.addEventListener("load", function () {
+    navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" }).then(function (reg) {
+      reg.update();
+      setInterval(function () { reg.update(); }, 60000);  // 1분마다 새 버전 확인
+    }).catch(function () {});
+    var refreshed = false;
+    navigator.serviceWorker.addEventListener("controllerchange", function () {
+      if (refreshed) return; refreshed = true; location.reload();  // 새 버전 활성화되면 자동 새로고침
+    });
+  });
 })();
