@@ -6,6 +6,7 @@
   var STATE = {}, listeners = [], mode = "local", fbRoot = null;
   var ROOT_PATH = "trips/" + (window.TRIP_ID || "default");
   var LS_KEY = "tokyotrip:" + (window.TRIP_ID || "default");
+  var UI_KEY = "tokyotrip:ui:" + (window.TRIP_ID || "default");  // 기기별 화면 상태(탭 등)
 
   function emit() { listeners.forEach(function (cb) { cb(STATE); }); }
   function getPath(o, p) { var a = p.split("/"), c = o; for (var i = 0; i < a.length; i++) { if (c == null) return undefined; c = c[a[i]]; } return c; }
@@ -307,6 +308,8 @@
 
   /* ---------- UI 상태 ---------- */
   var tab = "itin", dayIdx = 0, seg = "shop", selected = null, newPayer = "m", newCur = "JPY";
+  function saveUI() { try { localStorage.setItem(UI_KEY, JSON.stringify({ tab: tab, dayIdx: dayIdx, seg: seg })); } catch (e) {} }
+  function loadUI() { try { var u = JSON.parse(localStorage.getItem(UI_KEY)); if (u) { if (u.tab) tab = u.tab; if (u.dayIdx != null) dayIdx = u.dayIdx; if (u.seg) seg = u.seg; } } catch (e) {} }
   var armed = null, armedTimer = null;  // 두 번 탭 삭제 확인
   function armOrRun(token, run) {
     if (armed === token) { armed = null; if (armedTimer) clearTimeout(armedTimer); run(); return; }
@@ -688,9 +691,9 @@
     var nav = t.closest(".navbtn");
     var ed = t.closest(".editable");
     if (ed) { startEdit(ed); return; }
-    if (nav) { armed = null; tab = nav.dataset.tab; selected = null; render(); window.scrollTo(0, 0); return; }
-    var dc = t.closest("[data-day]"); if (dc) { armed = null; dayIdx = +dc.dataset.day; render(); return; }
-    var sg = t.closest("[data-seg]"); if (sg) { armed = null; seg = sg.dataset.seg; render(); return; }
+    if (nav) { armed = null; tab = nav.dataset.tab; selected = null; saveUI(); render(); window.scrollTo(0, 0); return; }
+    var dc = t.closest("[data-day]"); if (dc) { armed = null; dayIdx = +dc.dataset.day; saveUI(); render(); return; }
+    var sg = t.closest("[data-seg]"); if (sg) { armed = null; seg = sg.dataset.seg; saveUI(); render(); return; }
     var dts = t.closest("[data-daytrip]"); if (dts) { armed = null; DB.set("daytrip", dts.dataset.daytrip); return; }
     var cu = t.closest("[data-cur]"); if (cu) { armed = null; DB.set("budgetCur", cu.dataset.cur); return; }
     if (t.dataset.logout) { if (window.firebase && firebase.auth) firebase.auth().signOut(); return; }
@@ -735,6 +738,7 @@
 
   /* ---------- 시작 ---------- */
   DB.onChange(function () { render(); });
+  loadUI();
   initSync();
   initMaps();
   render();
