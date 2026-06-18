@@ -43,8 +43,12 @@
     if (fbRoot) return;
     var db = firebase.database();
     fbRoot = db.ref(ROOT_PATH);
-    fbRoot.on("value", function (s) { STATE = s.val() || {}; emit(); });
-    seedDefaults();
+    var seededOnce = false;
+    fbRoot.on("value", function (s) {
+      STATE = s.val() || {};
+      if (!seededOnce) { seededOnce = true; seedDefaults(); }  // 첫 스냅샷 로드 후에만 시드 → 삭제 항목 복구 방지
+      emit();
+    });
   }
 
   /* ---------- 로그인 게이트 ---------- */
