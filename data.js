@@ -96,11 +96,12 @@ window.DAYTRIPS = [
 
 /* 장소 세그먼트 */
 window.SEGMENTS = [
-  { key: "shop", label: "쇼핑" },
-  { key: "food", label: "먹거리" },
-  { key: "dessert", label: "디저트" },
-  { key: "trip", label: "근교" },
+  { key: "shop", label: "쇼핑", color: "#3c5a6e" },
+  { key: "food", label: "먹거리", color: "#b23b3b" },
+  { key: "dessert", label: "디저트", color: "#b5497a" },
+  { key: "trip", label: "근교", color: "#4f6b4a" },
 ];
+window.SEG_COLOR = { shop: "#3c5a6e", food: "#b23b3b", dessert: "#b5497a", trip: "#4f6b4a" };
 
 /* 장소 큐레이션. list = 도쿄 세그먼트, trip = 근교 플랜 키. pinNum = 도쿄 지도 번호핀 */
 window.PLACES = [

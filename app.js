@@ -7,7 +7,7 @@
   var ROOT_PATH = "trips/" + (window.TRIP_ID || "default");
   var LS_KEY = "tokyotrip:" + (window.TRIP_ID || "default");
   var UI_KEY = "tokyotrip:ui:" + (window.TRIP_ID || "default");  // 기기별 화면 상태(탭 등)
-  var APP_VER = "v22";
+  var APP_VER = "v23";
 
   function emit() { listeners.forEach(function (cb) { cb(STATE); }); }
   function getPath(o, p) { var a = p.split("/"), c = o; for (var i = 0; i < a.length; i++) { if (c == null) return undefined; c = c[a[i]]; } return c; }
@@ -308,9 +308,9 @@
   }
 
   /* ---------- UI 상태 ---------- */
-  var tab = "itin", dayIdx = 0, seg = "shop", selected = null, newPayer = "m", newCur = "JPY";
-  function saveUI() { try { localStorage.setItem(UI_KEY, JSON.stringify({ tab: tab, dayIdx: dayIdx, seg: seg })); } catch (e) {} }
-  function loadUI() { try { var u = JSON.parse(localStorage.getItem(UI_KEY)); if (u) { if (u.tab) tab = u.tab; if (u.dayIdx != null) dayIdx = u.dayIdx; if (u.seg) seg = u.seg; } } catch (e) {} }
+  var tab = "itin", dayIdx = 0, seg = "shop", selected = null, newPayer = "m", newCur = "JPY", mapFilter = "all";
+  function saveUI() { try { localStorage.setItem(UI_KEY, JSON.stringify({ tab: tab, dayIdx: dayIdx, seg: seg, mapFilter: mapFilter })); } catch (e) {} }
+  function loadUI() { try { var u = JSON.parse(localStorage.getItem(UI_KEY)); if (u) { if (u.tab) tab = u.tab; if (u.dayIdx != null) dayIdx = u.dayIdx; if (u.seg) seg = u.seg; if (u.mapFilter) mapFilter = u.mapFilter; } } catch (e) {} }
   var armed = null, armedTimer = null;  // 두 번 탭 삭제 확인
   function armOrRun(token, run) {
     if (armed === token) { armed = null; if (armedTimer) clearTimeout(armedTimer); run(); return; }
@@ -421,18 +421,28 @@
 
   function renderMap() {
     _mapList = mapPlaceList();
+    // 범례 겸 필터 (색으로 카테고리 구분 + 탭하면 그 카테고리만)
+    var legend = '<div class="maplegend">' +
+      '<button class="legchip ' + (mapFilter === "all" ? "on" : "") + '" data-mapfilter="all">전체</button>' +
+      (window.SEGMENTS || []).map(function (s) {
+        return '<button class="legchip ' + (mapFilter === s.key ? "on" : "") + '" data-mapfilter="' + s.key + '">' +
+          '<span class="legdot" style="background:' + s.color + '"></span>' + esc(s.label) + '</button>';
+      }).join("") + '</div>';
+
     var listHtml = "", curseg = null;
     _mapList.forEach(function (o) {
+      if (mapFilter !== "all" && o.seg.key !== mapFilter) return;
       if (o.seg.key !== curseg) { curseg = o.seg.key; listHtml += '<div class="mapgroup">' + esc(o.seg.label) + '</div>'; }
       var rh = rateHtmlFor(o.p, "rate");
-      listHtml += '<div class="maprow" data-place="' + o.p.id + '"><div class="n">' + o.num + '</div>' +
+      listHtml += '<div class="maprow" data-place="' + o.p.id + '"><div class="n" style="background:' + o.seg.color + ';color:#fff">' + o.num + '</div>' +
         '<div style="flex:1;min-width:0"><div class="nm">' + esc(o.p.name) + '</div>' +
         '<div class="meta">' + esc(o.p.area) + (rh ? ' · ' + rh : "") + '</div></div>' +
         '<div class="arr">›</div></div>';
     });
     return '<div class="sec">' +
       '<div class="sechead"><div class="eyebrow">MAP</div><div class="sectitle"><div class="kr">지도</div><div class="jp">地図</div></div>' +
-      '<div class="secdesc">장소 탭의 모든 곳 표시 · 핀/목록 탭하면 상세. ' + esc(window.RATINGS_ASOF || "") + '</div></div>' +
+      '<div class="secdesc">색으로 카테고리 구분 · 범례를 탭하면 그것만 보기. ' + esc(window.RATINGS_ASOF || "") + '</div></div>' +
+      legend +
       '<div id="map"></div>' +
       '<a class="maplinkbtn" target="_blank" rel="noopener" href="' + mapLink("東京 観光") + '"><span class="d"></span>구글 지도 앱에서 보기</a>' +
       '<div class="maplist">' + listHtml + '</div></div>';
@@ -656,12 +666,15 @@
     var pts = [];
     ml.forEach(function (o) {
       var p = o.p; if (p.lat == null) return;
-      var icon = L.divIcon({ className: "pin", html: '<div class="pinmark"><span>' + o.num + '</span></div>', iconSize: [27, 27], iconAnchor: [13, 27], popupAnchor: [0, -26] });
+      if (mapFilter !== "all" && o.seg.key !== mapFilter) return;  // 필터된 카테고리만
+      var col = o.seg.color || "#b23b3b";
+      var icon = L.divIcon({ className: "pin", html: '<div class="pinmark" style="background:' + col + '"><span>' + o.num + '</span></div>', iconSize: [27, 27], iconAnchor: [13, 27], popupAnchor: [0, -26] });
       var m = L.marker([p.lat, p.lng], { icon: icon }).addTo(map);
       m.on("click", function () { openSheet(p.id); });
       m.bindTooltip(o.num + ". " + p.name, { direction: "top", offset: [0, -24] });
       markers.push(m);
-      if (o.seg.key !== "trip") pts.push([p.lat, p.lng]);  // 도쿄 군집 기준으로 화면 맞춤
+      // 화면 맞춤: 전체일 땐 도쿄(근교 제외) 기준, 특정 카테고리일 땐 그 핀들 기준
+      if (mapFilter === "all" ? (o.seg.key !== "trip") : true) pts.push([p.lat, p.lng]);
     });
     setTimeout(function () { if (map) { map.invalidateSize(); if (pts.length) map.fitBounds(pts, { padding: [30, 30], maxZoom: 14 }); } }, 60);
   }
@@ -699,6 +712,7 @@
     if (nav) { armed = null; tab = nav.dataset.tab; selected = null; saveUI(); render(); window.scrollTo(0, 0); return; }
     var dc = t.closest("[data-day]"); if (dc) { armed = null; dayIdx = +dc.dataset.day; saveUI(); render(); return; }
     var sg = t.closest("[data-seg]"); if (sg) { armed = null; seg = sg.dataset.seg; saveUI(); render(); return; }
+    var mf = t.closest("[data-mapfilter]"); if (mf) { mapFilter = mf.dataset.mapfilter; saveUI(); render(); return; }
     var dts = t.closest("[data-daytrip]"); if (dts) { armed = null; DB.set("daytrip", dts.dataset.daytrip); return; }
     var cu = t.closest("[data-cur]"); if (cu) { armed = null; DB.set("budgetCur", cu.dataset.cur); return; }
     if (t.dataset.logout) { if (window.firebase && firebase.auth) firebase.auth().signOut(); return; }
