@@ -7,6 +7,7 @@
   var ROOT_PATH = "trips/" + (window.TRIP_ID || "default");
   var LS_KEY = "tokyotrip:" + (window.TRIP_ID || "default");
   var UI_KEY = "tokyotrip:ui:" + (window.TRIP_ID || "default");  // 기기별 화면 상태(탭 등)
+  var APP_VER = "v22";
 
   function emit() { listeners.forEach(function (cb) { cb(STATE); }); }
   function getPath(o, p) { var a = p.split("/"), c = o; for (var i = 0; i < a.length; i++) { if (c == null) return undefined; c = c[a[i]]; } return c; }
@@ -559,7 +560,11 @@
       '<div class="notice"><div class="t">6월 도쿄는 장마철이에요</div><div class="b">비 소식이 잦고 습해요. 접이식 우산과 통풍 잘되는 옷을 꼭 챙기세요.</div></div>' +
       groups +
       '<div style="padding:4px 22px 0"><div class="subhead" style="margin-bottom:12px">여행 정보</div>' + info + '</div>' +
-      (mode === "firebase" ? '<div style="text-align:center"><button class="logout" data-logout="1">로그아웃</button></div>' : '') +
+      '<div style="text-align:center;margin-top:18px">' +
+        '<button class="logout" data-forceupdate="1">앱 강제 업데이트(캐시 비우기)</button>' +
+        (mode === "firebase" ? ' · <button class="logout" data-logout="1">로그아웃</button>' : '') +
+        '<div style="font-size:11px;color:var(--muted);margin-top:8px">버전 ' + APP_VER + '</div>' +
+      '</div>' +
       '</div>';
   }
 
@@ -697,6 +702,12 @@
     var dts = t.closest("[data-daytrip]"); if (dts) { armed = null; DB.set("daytrip", dts.dataset.daytrip); return; }
     var cu = t.closest("[data-cur]"); if (cu) { armed = null; DB.set("budgetCur", cu.dataset.cur); return; }
     if (t.dataset.logout) { if (window.firebase && firebase.auth) firebase.auth().signOut(); return; }
+    if (t.dataset.forceupdate) {
+      var reload = function () { location.reload(); };
+      var p = (navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }) : Promise.resolve());
+      p.then(function () { return window.caches ? caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }) : null; }).then(reload, reload);
+      return;
+    }
     if (t.closest("[data-close]")) { closeSheet(false); return; }
     if (t.dataset.delplace) { var dpv = t.dataset.delplace; armOrRun("delplace:" + dpv, function () { DB.remove("uplaces/" + dpv); }); return; }
     if (t.dataset.hideplace) { var hpv = t.dataset.hideplace; armOrRun("hideplace:" + hpv, function () { DB.set("phidden/" + hpv, true); }); return; }

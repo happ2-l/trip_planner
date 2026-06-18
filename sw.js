@@ -1,5 +1,5 @@
 /* 서비스워커: 오프라인 캐싱 (앱 쉘) */
-var CACHE = "tokyo-trip-v21";
+var CACHE = "tokyo-trip-v22";
 var ASSETS = [
   "./",
   "./index.html",
@@ -44,19 +44,31 @@ self.addEventListener("fetch", function (e) {
   // Firebase DB 실시간 트래픽은 캐싱하지 않고 네트워크로
   if (url.hostname.indexOf("firebaseio.com") !== -1 || url.hostname.indexOf("googleapis.com") !== -1) return;
 
+  var sameOrigin = url.origin === self.location.origin;
+  // 앱 코드/문서는 "네트워크 우선"(온라인이면 항상 최신) → 캐시 stale 방지
+  var isShell = req.mode === "navigate" ||
+    (sameOrigin && /\.(html|js|css|webmanifest)$/.test(url.pathname));
+
+  if (isShell) {
+    e.respondWith(
+      fetch(req).then(function (res) {
+        if (res && res.status === 200) { var copy = res.clone(); caches.open(CACHE).then(function (c) { c.put(req, copy); }); }
+        return res;
+      }).catch(function () {
+        return caches.match(req).then(function (hit) { return hit || caches.match("./index.html"); });
+      })
+    );
+    return;
+  }
+
+  // 이미지/폰트/CDN 라이브러리 등은 "캐시 우선"(빠르고 오프라인 OK)
   e.respondWith(
     caches.match(req).then(function (hit) {
       if (hit) return hit;
       return fetch(req).then(function (res) {
-        // 같은 출처 자원은 캐시에 추가
-        if (res && res.status === 200 && url.origin === self.location.origin) {
-          var copy = res.clone();
-          caches.open(CACHE).then(function (c) { c.put(req, copy); });
-        }
+        if (res && res.status === 200 && sameOrigin) { var copy = res.clone(); caches.open(CACHE).then(function (c) { c.put(req, copy); }); }
         return res;
-      }).catch(function () {
-        if (req.mode === "navigate") return caches.match("./index.html");
-      });
+      }).catch(function () { return undefined; });
     })
   );
 });
