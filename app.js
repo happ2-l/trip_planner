@@ -7,7 +7,7 @@
   var ROOT_PATH = "trips/" + (window.TRIP_ID || "default");
   var LS_KEY = "tokyotrip:" + (window.TRIP_ID || "default");
   var UI_KEY = "tokyotrip:ui:" + (window.TRIP_ID || "default");  // 기기별 화면 상태(탭 등)
-  var APP_VER = "v24";
+  var APP_VER = "v25";
 
   function emit() { listeners.forEach(function (cb) { cb(STATE); }); }
   function getPath(o, p) { var a = p.split("/"), c = o; for (var i = 0; i < a.length; i++) { if (c == null) return undefined; c = c[a[i]]; } return c; }
@@ -223,9 +223,23 @@
   }
   function photonRec(r) {
     var img = "images/cat/" + (r.key || "default") + ".jpg";
-    var rec = { name: r.name, area: r.area || "", cat: r.cat || "", mapq: (r.name + " " + (r.city || r.area || "")).trim(), img: img, catimg: img };
+    var rec = { name: r.name, area: r.area || "", cat: r.cat || "", key: r.key || "default", mapq: (r.name + " " + (r.city || r.area || "")).trim(), img: img, catimg: img };
     if (r.lat != null && r.lng != null) { rec.lat = r.lat; rec.lng = r.lng; }
     return rec;
+  }
+  // 장소 종류 → 세그먼트 자동 분류
+  function segForKey(k) {
+    if (k === "restaurant" || k === "bar") return "food";
+    if (k === "cafe" || k === "dessert" || k === "bakery") return "dessert";
+    if (k === "shopping" || k === "store") return "shop";
+    return null;
+  }
+  function segLabel(key) { var s = (window.SEGMENTS || []).filter(function (x) { return x.key === key; })[0]; return s ? s.label : key; }
+  function segColor(key) { return (window.SEG_COLOR || {})[key] || "#b23b3b"; }
+  function slotCandidates(cat) {
+    var def = window.PLACES.filter(function (p) { return p.list === cat && !DB.get("phidden/" + p.id); });
+    var cust = customPlaces().filter(function (c) { return c.list === cat; });
+    return def.concat(cust);
   }
   function resolveGoogle(r, cb) {
     if (!r || !r.placeId) return;
@@ -237,7 +251,7 @@
       var photo = (place.photos && place.photos[0]) ? place.photos[0].getURI({ maxWidth: 900 }) : null;
       var ckey = catKeyFromTypes(place.types);
       cb({ name: (place.displayName || r.name), area: shortArea(r.area || place.formattedAddress || ""),
-        cat: catKoFromTypes(place.types), mapq: (place.displayName || r.name) + " " + (place.formattedAddress || ""),
+        cat: catKoFromTypes(place.types), key: ckey, mapq: (place.displayName || r.name) + " " + (place.formattedAddress || ""),
         lat: place.location ? place.location.lat() : null, lng: place.location ? place.location.lng() : null,
         rating: (place.rating != null ? place.rating : null), reviews: (place.userRatingCount != null ? place.userRatingCount : null),
         img: photo || ("images/cat/" + ckey + ".jpg"), catimg: "images/cat/" + ckey + ".jpg" });
@@ -247,7 +261,9 @@
     if (searchAction === "hotel") {
       DB.set("hotel", { name: rec.name, address: rec.area || "", lat: (rec.lat != null ? rec.lat : null), lng: (rec.lng != null ? rec.lng : null), mapq: rec.mapq || rec.name });
     } else {
-      rec.seg = seg; if (seg === "trip") rec.trip = tripKey();
+      // 근교 탭에서 추가하면 그 근교에, 그 외엔 종류로 자동 분류(음식점→먹거리, 카페/베이커리→디저트, 매장→쇼핑)
+      if (seg === "trip") { rec.seg = "trip"; rec.trip = tripKey(); }
+      else { var fb = (seg === "shop" || seg === "food" || seg === "dessert") ? seg : "shop"; rec.seg = segForKey(rec.key) || fb; }
       DB.push("uplaces", rec);
     }
   }
@@ -381,14 +397,27 @@
     var custom = DB.get("custom/" + day.key) || {};
     Object.keys(custom).forEach(function (id) {
       var c = custom[id], base = "custom/" + day.key + "/" + id;
-      items.push({ base: base, custom: true, pid: null, jp: "", sub: "", tag: "추가", time: c.time || "", title: c.title || "", done: !!c.done, memo: c.memo || "" });
+      items.push({ base: base, custom: true, pid: c.pid || null, cat: c.cat || null,
+        jp: "", sub: "", tag: c.cat ? segLabel(c.cat) : "추가", time: c.time || "", title: c.title || "",
+        done: !!c.done, memo: c.memo || "", slot: !!(c.cat && !c.title) });
     });
     items.sort(function (a, b) { return (a.time || "").localeCompare(b.time || ""); });
 
     var tl = items.map(function (it) {
-      return '<div class="ev ' + (it.done ? "done" : "") + '">' +
-        '<div class="time"><span class="t editable timeedit" data-path="' + it.base + '" data-field="time">' + (esc(it.time) || "—") + '</span></div>' +
-        '<div class="rail"><div class="line"></div><div class="node"></div></div>' +
+      var timeCol = '<div class="time"><span class="t editable timeedit" data-path="' + it.base + '" data-field="time">' + (esc(it.time) || "—") + '</span></div>';
+      var rail = '<div class="rail"><div class="line"></div><div class="node"></div></div>';
+      var delBtn = (function () { var a = it.custom ? "del" : "deldef", on = armed === (a + ":" + it.base);
+        return '<button class="act muted' + (on ? " armed" : "") + '" data-' + a + '="' + it.base + '" style="margin-left:auto">' + (on ? "삭제 확인" : "삭제") + '</button>'; })();
+      if (it.slot) {  // 카테고리 슬롯: 후보 장소 중 고르기
+        var chips = slotCandidates(it.cat).map(function (p) { return '<button class="slotchip" data-fill="' + it.base + '::' + p.id + '">' + esc(p.name) + '</button>'; }).join("");
+        return '<div class="ev"><div class="time"><span class="t editable timeedit" data-path="' + it.base + '" data-field="time">' + (esc(it.time) || "—") + '</span></div>' + rail +
+          '<div class="body"><div class="evcard slot" style="border-left:3px solid ' + segColor(it.cat) + '">' +
+            '<div class="slottitle"><span class="slotdot" style="background:' + segColor(it.cat) + '"></span>「' + esc(segLabel(it.cat)) + '」 어디 갈까?</div>' +
+            '<div class="slotchips">' + (chips || '<span class="hint">후보 없음 — 장소 탭에서 추가하세요</span>') + '</div>' +
+            '<div class="acts">' + delBtn + '</div>' +
+          '</div></div></div>';
+      }
+      return '<div class="ev ' + (it.done ? "done" : "") + '">' + timeCol + rail +
         '<div class="body"><div class="evcard ' + (it.done ? "done" : "") + '">' +
           '<div class="top"><div style="min-width:0">' +
             '<div class="title editable" data-path="' + it.base + '" data-field="title">' + (esc(it.title) || "(제목)") + '</div>' +
@@ -398,14 +427,17 @@
           '<div class="acts">' +
             (it.pid ? '<button class="act" data-place="' + it.pid + '">장소 정보 ›</button>' : '') +
             '<button class="act muted" data-toggle="' + it.base + '/done">' + (it.done ? "완료 취소" : "완료 체크") + '</button>' +
-            (function () { var a = it.custom ? "del" : "deldef", on = armed === (a + ":" + it.base);
-              return '<button class="act muted' + (on ? " armed" : "") + '" data-' + a + '="' + it.base + '" style="margin-left:auto">' + (on ? "삭제 확인" : "삭제") + '</button>'; })() +
+            delBtn +
           '</div>' +
           '<input class="memo" data-memo="' + it.base + '/memo" value="' + esc(it.memo) + '" placeholder="메모">' +
         '</div></div></div>';
     }).join("");
 
-    var add = '<div class="tl"><div class="addrow"><input class="ti" id="newtime" placeholder="09:00"><input class="tt" id="newtitle" placeholder="새 일정 추가"><button id="addbtn">추가</button></div></div>';
+    var add = '<div class="tl">' +
+      '<div class="slotadd"><span class="slotaddlbl">+ 카테고리로 추가:</span>' +
+        '<button data-addslot="shop">쇼핑</button><button data-addslot="food">먹거리</button><button data-addslot="dessert">디저트</button>' +
+      '</div>' +
+      '<div class="addrow"><input class="ti" id="newtime" placeholder="09:00"><input class="tt" id="newtitle" placeholder="직접 입력…"><button id="addbtn">추가</button></div></div>';
 
     var h = DB.get("hotel"), hotelBanner = "";
     if (h && h.name) {
@@ -800,6 +832,8 @@
     if (t.dataset.newpayer) { newPayer = t.dataset.newpayer; render(); return; }
     if (t.dataset.curtoggle) { var ck = t.dataset.curtoggle, cc = DB.get("expenses/" + ck + "/cur") || "JPY"; DB.set("expenses/" + ck + "/cur", cc === "JPY" ? "KRW" : "JPY"); return; }
     if (t.dataset.newcur) { newCur = t.dataset.newcur; render(); return; }
+    var as = t.closest("[data-addslot]"); if (as) { DB.push("custom/" + window.DAYS[dayIdx].key, { cat: as.dataset.addslot, time: "" }); return; }
+    if (t.dataset.fill) { var fp = t.dataset.fill.split("::"); var fpl = getPlace(fp[1]); if (fpl) { DB.set(fp[0] + "/pid", fp[1]); DB.set(fp[0] + "/title", fpl.name); } return; }
     if (t.id === "addbtn") { var ti = $("#newtime").value.trim(), tt = $("#newtitle").value.trim(); if (tt) DB.push("custom/" + window.DAYS[dayIdx].key, { time: ti, title: tt }); return; }
     if (t.id === "expadd") { var lbl = $("#explbl").value.trim(), amt = Number($("#expamt").value.replace(/[^0-9.]/g, "")) || 0; if (lbl && amt) { DB.push("expenses", { label: lbl, payer: newPayer, amount: amt, cur: newCur }); } return; }
     if (t.id === "addprep") { var pv = $("#newprep").value.trim(); if (pv) addPrep(pv); return; }

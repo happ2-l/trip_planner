@@ -94,6 +94,16 @@ input{font-family:inherit}
   border-radius:9px;padding:7px 10px;font-size:12.5px;color:var(--ink)}
 .evcard .memo:focus{outline:none;border-color:var(--red)}
 
+.slotadd{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin:16px 0 0}
+.slotaddlbl{font-size:12.5px;color:var(--sub)}
+.slotadd button{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:7px 14px;font-size:13px;color:var(--ink);cursor:pointer;font-weight:600}
+.slotadd button:active{background:var(--card2)}
+.evcard.slot{background:var(--card)}
+.slottitle{font-family:var(--serif);font-size:15px;color:var(--ink);display:flex;align-items:center;gap:8px}
+.slotdot{width:9px;height:9px;border-radius:50%;flex:none}
+.slotchips{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.slotchip{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:7px 11px;font-size:13px;color:var(--ink);cursor:pointer}
+.slotchip:active{background:#ece4d4}
 .addrow{display:flex;gap:8px;margin:14px 0 0}
 .addrow input{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:11px 12px;font-size:14px;color:var(--ink)}
 .addrow input:focus{outline:none;border-color:var(--red)}
