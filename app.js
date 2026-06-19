@@ -7,7 +7,7 @@
   var ROOT_PATH = "trips/" + (window.TRIP_ID || "default");
   var LS_KEY = "tokyotrip:" + (window.TRIP_ID || "default");
   var UI_KEY = "tokyotrip:ui:" + (window.TRIP_ID || "default");  // 기기별 화면 상태(탭 등)
-  var APP_VER = "v26";
+  var APP_VER = "v27";
 
   function emit() { listeners.forEach(function (cb) { cb(STATE); }); }
   function getPath(o, p) { var a = p.split("/"), c = o; for (var i = 0; i < a.length; i++) { if (c == null) return undefined; c = c[a[i]]; } return c; }
@@ -241,6 +241,29 @@
     var cust = customPlaces().filter(function (c) { return c.list === cat; });
     return def.concat(cust);
   }
+  // 일정 카드별 '이 시간대 가고싶은 곳' 후보 (담은 칩 + 펼침 피커)
+  function candHtml(base) {
+    var obj = DB.get(base + "/cands") || {};
+    var ids = Object.keys(obj).filter(function (id) { return obj[id]; });
+    var chips = ids.map(function (id) {
+      var p = getPlace(id), nm = p ? p.name : id, col = p ? segColor(p.list) : "#b23b3b";
+      return '<span class="candchip" data-place="' + id + '"><span class="cdot" style="background:' + col + '"></span>' + esc(nm) + '<button class="candx" data-candrm="' + base + '::' + id + '">✕</button></span>';
+    }).join("");
+    var open = candOpen === base;
+    var btn = '<button class="candbtn" data-candopen="' + base + '">🔖 가고싶은 곳' + (ids.length ? " " + ids.length : "") + (open ? " ▲" : " ▼") + '</button>';
+    var picker = "";
+    if (open) {
+      var segs = '<div class="seg candseg">' + ["shop", "food", "dessert"].map(function (k) {
+        return '<div class="opt ' + (candSeg === k ? "on" : "") + '" data-candseg="' + k + '">' + esc(segLabel(k)) + '</div>';
+      }).join("") + '</div>';
+      var pchips = slotCandidates(candSeg).map(function (p) {
+        var on = !!obj[p.id];
+        return '<button class="slotchip' + (on ? " on" : "") + '" data-candtoggle="' + base + '::' + p.id + '">' + (on ? "✓ " : "") + esc(p.name) + '</button>';
+      }).join("");
+      picker = '<div class="candpicker">' + segs + '<div class="slotchips">' + pchips + '</div></div>';
+    }
+    return '<div class="cands">' + (chips ? '<div class="candchips">' + chips + '</div>' : "") + btn + picker + '</div>';
+  }
   function resolveGoogle(r, cb) {
     if (!r || !r.placeId) return;
     var box = document.getElementById(searchBox); if (box) box.innerHTML = '<div class="plres plres-info">불러오는 중…</div>';
@@ -335,6 +358,7 @@
   var tab = "itin", dayIdx = 0, seg = "shop", selected = null, newPayer = "m", newCur = "JPY", mapFilter = "all";
   function saveUI() { try { localStorage.setItem(UI_KEY, JSON.stringify({ tab: tab, dayIdx: dayIdx, seg: seg, mapFilter: mapFilter })); } catch (e) {} }
   function loadUI() { try { var u = JSON.parse(localStorage.getItem(UI_KEY)); if (u) { if (u.tab) tab = u.tab; if (u.dayIdx != null) dayIdx = u.dayIdx; if (u.seg) seg = u.seg; if (u.mapFilter) mapFilter = u.mapFilter; } } catch (e) {} }
+  var candOpen = null, candSeg = "food";  // 일정 카드별 '가고싶은 곳' 후보 담기 UI
   var armed = null, armedTimer = null;  // 두 번 탭 삭제 확인
   function armOrRun(token, run) {
     if (armed === token) { armed = null; if (armedTimer) clearTimeout(armedTimer); run(); return; }
@@ -430,6 +454,7 @@
             delBtn +
           '</div>' +
           '<input class="memo" data-memo="' + it.base + '/memo" value="' + esc(it.memo) + '" placeholder="메모">' +
+          candHtml(it.base) +
         '</div></div></div>';
     }).join("");
 
@@ -603,6 +628,11 @@
     return Object.keys(o).map(function (id) { var c = o[id] || {}; return { id: id, text: c.text || "", done: !!c.done, order: (c.order != null ? c.order : 0) }; })
       .sort(function (a, b) { return a.order - b.order; });
   }
+  function tipsList() {
+    var o = DB.get("tips") || {};
+    return Object.keys(o).map(function (id) { var c = o[id] || {}; return { id: id, text: c.text || "", order: (c.order != null ? c.order : 0) }; })
+      .sort(function (a, b) { return a.order - b.order; });
+  }
   function renderHotelCard() {
     var h = DB.get("hotel");
     if (h && h.name) {
@@ -641,6 +671,17 @@
         '<div class="airnote">' + esc(t.note) + '</div></div>';
     }).join("");
 
+    var tips = tipsList();
+    var tipRows = tips.map(function (tp) {
+      var arm = armed === ("deltip:" + tp.id);
+      return '<div class="tipitem"><span class="tipdash">•</span><span class="tiptext editable" data-path="tips/' + tp.id + '" data-field="text">' + esc(tp.text) + '</span>' +
+        '<button class="del' + (arm ? " armed" : "") + '" data-deltip="' + tp.id + '">' + (arm ? "삭제?" : "✕") + '</button></div>';
+    }).join("");
+    var tipsCard = '<div style="padding:18px 22px 0"><div class="subhead" style="margin-bottom:10px">우리 팁 · メモ</div><div class="tipbox">' +
+      (tipRows || '<div class="hint" style="margin:2px 0 4px">여행 꿀팁·메모를 자유롭게 적어보세요 (친구들과 공유)</div>') +
+      '<div class="addrow"><input class="tt" id="newtip" placeholder="팁 추가… (예: 츠케멘은 11시 전에)"><button id="addtip">추가</button></div>' +
+    '</div></div>';
+
     return '<div class="sec">' +
       '<div class="sechead"><div class="eyebrow">CHECKLIST</div><div class="sectitle"><div class="kr">준비</div><div class="jp">準備</div></div></div>' +
       '<div class="notice"><div class="t">6월 도쿄는 장마철이에요</div><div class="b">비 소식이 잦고 습해요. 접이식 우산과 통풍 잘되는 옷을 꼭 챙기세요.</div></div>' +
@@ -649,6 +690,7 @@
         '<div class="addrow"><input class="tt" id="newprep" placeholder="준비물 추가…"><button id="addprep">추가</button></div>' +
         '<div class="hint" style="margin-top:8px">글자 탭=수정 · ▲▼=순서변경 · ✕ 두 번=삭제</div>' +
       '</div>' +
+      tipsCard +
       '<div style="padding:8px 22px 0">' + renderHotelCard() + '</div>' +
       '<div style="padding:8px 22px 0"><div class="subhead" style="margin-bottom:10px">나리타 → 신주쿠 가는 법</div><div class="aircard">' + airport + '</div>' +
         '<div class="hint" style="margin-top:8px">짐 많으면 N\'EX·리무진버스, 빠르게면 스카이라이너(닛포리 환승). 하네다 도착이면 게이큐선/모노레일로 ~50분.</div></div>' +
@@ -816,6 +858,10 @@
       return;
     }
     if (t.closest("[data-close]")) { closeSheet(false); return; }
+    if (t.dataset.candrm) { var cr = t.dataset.candrm.split("::"); DB.remove(cr[0] + "/cands/" + cr[1]); return; }
+    var co = t.closest("[data-candopen]"); if (co) { var cb = co.dataset.candopen; candOpen = (candOpen === cb) ? null : cb; render(); return; }
+    var csg = t.closest("[data-candseg]"); if (csg) { candSeg = csg.dataset.candseg; render(); return; }
+    if (t.dataset.candtoggle) { var ctp = t.dataset.candtoggle.split("::"), cpath = ctp[0] + "/cands/" + ctp[1]; if (DB.get(cpath)) DB.remove(cpath); else DB.set(cpath, true); return; }
     if (t.dataset.delplace) { var dpv = t.dataset.delplace; armOrRun("delplace:" + dpv, function () { DB.remove("uplaces/" + dpv); }); return; }
     if (t.dataset.hideplace) { var hpv = t.dataset.hideplace; armOrRun("hideplace:" + hpv, function () { DB.set("phidden/" + hpv, true); }); return; }
     var pl = t.closest("[data-place]"); if (pl) { openSheet(pl.dataset.place); return; }
@@ -824,6 +870,7 @@
     if (t.dataset.prep) { DB.set("prep/" + t.dataset.prep + "/done", !DB.get("prep/" + t.dataset.prep + "/done")); return; }
     if (t.dataset.delprep) { var ppid = t.dataset.delprep; armOrRun("delprep:" + ppid, function () { DB.remove("prep/" + ppid); }); return; }
     if (t.dataset.moveprep) { movePrep(t.dataset.moveprep); return; }
+    if (t.dataset.deltip) { var ttid = t.dataset.deltip; armOrRun("deltip:" + ttid, function () { DB.remove("tips/" + ttid); }); return; }
     if (t.dataset.hotelclear) { DB.remove("hotel"); return; }
     var cck = t.closest("[data-check]"); if (cck) { DB.set("checks/" + cck.dataset.check, !DB.get("checks/" + cck.dataset.check)); return; }
     if (t.dataset.deldef) { var ddv = t.dataset.deldef; armOrRun("deldef:" + ddv, function () { DB.set(ddv + "/deleted", true); }); return; }
@@ -843,6 +890,7 @@
     if (t.id === "addbtn") { var ti = $("#newtime").value.trim(), tt = $("#newtitle").value.trim(); if (tt) DB.push("custom/" + window.DAYS[dayIdx].key, { time: ti, title: tt }); return; }
     if (t.id === "expadd") { var lbl = $("#explbl").value.trim(), amt = Number($("#expamt").value.replace(/[^0-9.]/g, "")) || 0; if (lbl && amt) { DB.push("expenses", { label: lbl, payer: newPayer, amount: amt, cur: newCur }); } return; }
     if (t.id === "addprep") { var pv = $("#newprep").value.trim(); if (pv) addPrep(pv); return; }
+    if (t.id === "addtip") { var tv = $("#newtip").value.trim(); if (tv) addTip(tv); return; }
     var pr = t.closest(".plres"); if (pr) { if (pr.dataset.manual) pickManual(); else pickResult(lastResults[+pr.dataset.ridx]); return; }
   });
 
@@ -850,6 +898,11 @@
     var list = prepList();
     var maxOrder = list.length ? list[list.length - 1].order : 0;
     DB.push("prep", { text: text, done: false, order: maxOrder + 1 });
+  }
+  function addTip(text) {
+    var list = tipsList();
+    var mx = list.length ? list[list.length - 1].order : 0;
+    DB.push("tips", { text: text, order: mx + 1 });
   }
   function movePrep(token) {
     var parts = token.split(":"), id = parts[0], dir = +parts[1];
@@ -889,6 +942,7 @@
     if (e.target.id === "plsearch") { e.preventDefault(); searchBox = "plresults"; searchAction = "place"; pickManual(); }
     if (e.target.id === "hotelsearch") { e.preventDefault(); searchBox = "hotelresults"; searchAction = "hotel"; pickManual(); }
     if (e.target.id === "newprep") $("#addprep").click();
+    if (e.target.id === "newtip") $("#addtip").click();
   });
 
   /* ---------- 시작 ---------- */
