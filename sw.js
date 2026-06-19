@@ -1,5 +1,5 @@
 /* 서비스워커: 오프라인 캐싱 (앱 쉘) */
-var CACHE = "tokyo-trip-v27";
+var CACHE = "tokyo-trip-v28";
 var ASSETS = [
   "./",
   "./index.html",

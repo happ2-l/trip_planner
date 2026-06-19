@@ -7,7 +7,7 @@
   var ROOT_PATH = "trips/" + (window.TRIP_ID || "default");
   var LS_KEY = "tokyotrip:" + (window.TRIP_ID || "default");
   var UI_KEY = "tokyotrip:ui:" + (window.TRIP_ID || "default");  // 기기별 화면 상태(탭 등)
-  var APP_VER = "v27";
+  var APP_VER = "v28";
 
   function emit() { listeners.forEach(function (cb) { cb(STATE); }); }
   function getPath(o, p) { var a = p.split("/"), c = o; for (var i = 0; i < a.length; i++) { if (c == null) return undefined; c = c[a[i]]; } return c; }
@@ -229,7 +229,8 @@
   }
   // 장소 종류 → 세그먼트 자동 분류
   function segForKey(k) {
-    if (k === "restaurant" || k === "bar") return "food";
+    if (k === "bar") return "bar";
+    if (k === "restaurant") return "food";
     if (k === "cafe" || k === "dessert" || k === "bakery") return "dessert";
     if (k === "shopping" || k === "store") return "shop";
     return null;
@@ -253,8 +254,8 @@
     var btn = '<button class="candbtn" data-candopen="' + base + '">🔖 가고싶은 곳' + (ids.length ? " " + ids.length : "") + (open ? " ▲" : " ▼") + '</button>';
     var picker = "";
     if (open) {
-      var segs = '<div class="seg candseg">' + ["shop", "food", "dessert"].map(function (k) {
-        return '<div class="opt ' + (candSeg === k ? "on" : "") + '" data-candseg="' + k + '">' + esc(segLabel(k)) + '</div>';
+      var segs = '<div class="seg candseg">' + (window.SEGMENTS || []).map(function (s) {
+        return '<div class="opt ' + (candSeg === s.key ? "on" : "") + '" data-candseg="' + s.key + '">' + esc(s.label) + '</div>';
       }).join("") + '</div>';
       var pchips = slotCandidates(candSeg).map(function (p) {
         var on = !!obj[p.id];
@@ -285,8 +286,9 @@
       DB.set("hotel", { name: rec.name, address: rec.area || "", lat: (rec.lat != null ? rec.lat : null), lng: (rec.lng != null ? rec.lng : null), mapq: rec.mapq || rec.name });
     } else {
       // 근교 탭에서 추가하면 그 근교에, 그 외엔 종류로 자동 분류(음식점→먹거리, 카페/베이커리→디저트, 매장→쇼핑)
-      if (seg === "trip") { rec.seg = "trip"; rec.trip = tripKey(); }
-      else { var fb = (seg === "shop" || seg === "food" || seg === "dessert") ? seg : "shop"; rec.seg = segForKey(rec.key) || fb; }
+      var segKeys = (window.SEGMENTS || []).map(function (s) { return s.key; });
+      var fb = (segKeys.indexOf(seg) >= 0) ? seg : "shop";
+      rec.seg = segForKey(rec.key) || fb;
       DB.push("uplaces", rec);
     }
   }
@@ -357,7 +359,12 @@
   /* ---------- UI 상태 ---------- */
   var tab = "itin", dayIdx = 0, seg = "shop", selected = null, newPayer = "m", newCur = "JPY", mapFilter = "all";
   function saveUI() { try { localStorage.setItem(UI_KEY, JSON.stringify({ tab: tab, dayIdx: dayIdx, seg: seg, mapFilter: mapFilter })); } catch (e) {} }
-  function loadUI() { try { var u = JSON.parse(localStorage.getItem(UI_KEY)); if (u) { if (u.tab) tab = u.tab; if (u.dayIdx != null) dayIdx = u.dayIdx; if (u.seg) seg = u.seg; if (u.mapFilter) mapFilter = u.mapFilter; } } catch (e) {} }
+  function loadUI() {
+    try { var u = JSON.parse(localStorage.getItem(UI_KEY)); if (u) { if (u.tab) tab = u.tab; if (u.dayIdx != null) dayIdx = u.dayIdx; if (u.seg) seg = u.seg; if (u.mapFilter) mapFilter = u.mapFilter; } } catch (e) {}
+    var keys = (window.SEGMENTS || []).map(function (s) { return s.key; });  // 없어진 카테고리(근교 등) 정리
+    if (keys.indexOf(seg) < 0) seg = "shop";
+    if (mapFilter !== "all" && keys.indexOf(mapFilter) < 0) mapFilter = "all";
+  }
   var candOpen = null, candSeg = "food";  // 일정 카드별 '가고싶은 곳' 후보 담기 UI
   var armed = null, armedTimer = null;  // 두 번 탭 삭제 확인
   function armOrRun(token, run) {
@@ -460,7 +467,7 @@
 
     var add = '<div class="tl">' +
       '<div class="slotadd"><span class="slotaddlbl">+ 카테고리로 추가:</span>' +
-        '<button data-addslot="shop">쇼핑</button><button data-addslot="food">먹거리</button><button data-addslot="dessert">디저트</button>' +
+        (window.SEGMENTS || []).map(function (s) { return '<button data-addslot="' + s.key + '">' + esc(s.label) + '</button>'; }).join("") +
       '</div>' +
       '<div class="addrow"><input class="ti" id="newtime" placeholder="09:00"><input class="tt" id="newtitle" placeholder="직접 입력…"><button id="addbtn">추가</button></div></div>';
 

@@ -97,11 +97,12 @@ window.DAYTRIPS = [
 /* 장소 세그먼트 */
 window.SEGMENTS = [
   { key: "shop", label: "쇼핑", color: "#3c5a6e" },
-  { key: "food", label: "먹거리", color: "#b23b3b" },
+  { key: "food", label: "식당", color: "#b23b3b" },
+  { key: "bar", label: "술", color: "#8a6d3b" },
   { key: "dessert", label: "디저트", color: "#b5497a" },
-  { key: "trip", label: "근교", color: "#4f6b4a" },
 ];
-window.SEG_COLOR = { shop: "#3c5a6e", food: "#b23b3b", dessert: "#b5497a", trip: "#4f6b4a" };
+// trip은 카테고리에서 제외(2일차 근교 일정은 유지) — 색은 혹시 모를 참조용으로 남김
+window.SEG_COLOR = { shop: "#3c5a6e", food: "#b23b3b", bar: "#8a6d3b", dessert: "#b5497a", trip: "#4f6b4a" };
 
 /* 장소 큐레이션. list = 도쿄 세그먼트, trip = 근교 플랜 키. pinNum = 도쿄 지도 번호핀 */
 window.PLACES = [
@@ -122,11 +123,11 @@ window.PLACES = [
   { id: "ushigoro", name: "우시고로 S. 긴자", jp: "牛喰 S.", area: "긴자", cat: "야키니쿠 오마카세", hours: "디너", note: "미쉐린 A5 와규 오마카세 카운터. ¥25,000~30,000. 꽉 차면 우시고로 그룹 일반점(~¥15,000)이 훨씬 수월.", tip: "OMAKASE.in / TableCheck 예약.", list: "food", lat: 35.6717, lng: 139.7640, mapq: "Ushigoro S Ginza" },
   { id: "kappomuroi", name: "갓포 무로이", jp: "割烹 むろい", area: "니시아자부", cat: "갓포(가이세키)", hours: "디너", note: "미쉐린 1스타 부자(父子) 갓포, 제철 해산물 중심. ¥20,000~28,000. 카운터 정통 경험인데도 몇 주 전 예약 가능.", tip: "byFood / Tableall 예약.", list: "food", lat: 35.6590, lng: 139.7230, mapq: "Kappo Muroi Nishiazabu" },
   { id: "sakaishokai", name: "사카이쇼카이", jp: "酒井商会", area: "시부야/신센", cat: "네오 이자카야", hours: "17:00–24:00", note: "편안한 카운터 이자카야. 제철 식재 + 내추럴와인·사케 셀렉션. 합리적 가격의 미식.", tip: "카운터 작음, 예약 권장.", list: "food", lat: 35.6565, lng: 139.6940, mapq: "Sakai Shokai Shibuya" },
-  { id: "waltz", name: "와인스탠드 발츠", jp: "Wine Stand Waltz", area: "에비스", cat: "내추럴와인 바", hours: "15:00–23:00", note: "일본 내추럴와인 무브먼트의 상징적 인물 오야마 씨의 서서 마시는 작은 바. 바 투어 오프닝으로 완벽.", tip: "예약 없이 입장, 서서 마심.", list: "food", lat: 35.6465, lng: 139.7100, mapq: "Wine Stand Waltz Ebisu" },
-  { id: "banten", name: "반텐", jp: "番点", area: "에비스", cat: "청음 바", hours: "19:00–늦게", note: "숨은 레코드 바. 하이엔드 사운드 시스템 + 일본풍 칵테일, LP 지참 문화. 2026 청음 바 붐의 핫스팟.", tip: "작음 — DM/전화 예약 권장.", list: "food", lat: 35.6470, lng: 139.7110, mapq: "Banten Ebisu bar" },
-  { id: "bartrench", name: "바 트렌치", jp: "Bar Trench", area: "에비스", cat: "칵테일 바", hours: "18:00–늦게", note: "도쿄 크래프트 칵테일의 개척자. 진지한 한 잔. 작아서 초저녁 워크인이 유리.", tip: "", list: "food", lat: 35.6468, lng: 139.7105, mapq: "Bar Trench Ebisu" },
-  { id: "takk", name: "Takk 신센", jp: "Takk", area: "신센", cat: "청음 바", hours: "18:00–늦게", note: "2024.10 오픈한 신센 리스닝 바. 바이닐 + 위스키·진·내추럴와인. 2층 예약형 프라이빗룸도.", tip: "프라이빗룸 예약 가능.", list: "food", lat: 35.6565, lng: 139.6930, mapq: "Takk Shinsen bar" },
-  { id: "sgclub", name: "SG 클럽", jp: "SG Club", area: "시부야", cat: "칵테일 바", hours: "17:00–02:00", note: "고칸 신고의 멀티 플로어 바. 1층 캐주얼 시그니처, 지하 시가/스피크이지. 세계 베스트 바 단골.", tip: "지하 라운지는 예약 추천.", list: "food", lat: 35.6635, lng: 139.6970, mapq: "SG Club Shibuya" },
+  { id: "waltz", name: "와인스탠드 발츠", jp: "Wine Stand Waltz", area: "에비스", cat: "내추럴와인 바", hours: "15:00–23:00", note: "일본 내추럴와인 무브먼트의 상징적 인물 오야마 씨의 서서 마시는 작은 바. 바 투어 오프닝으로 완벽.", tip: "예약 없이 입장, 서서 마심.", list: "bar", lat: 35.6465, lng: 139.7100, mapq: "Wine Stand Waltz Ebisu" },
+  { id: "banten", name: "반텐", jp: "番点", area: "에비스", cat: "청음 바", hours: "19:00–늦게", note: "숨은 레코드 바. 하이엔드 사운드 시스템 + 일본풍 칵테일, LP 지참 문화. 2026 청음 바 붐의 핫스팟.", tip: "작음 — DM/전화 예약 권장.", list: "bar", lat: 35.6470, lng: 139.7110, mapq: "Banten Ebisu bar" },
+  { id: "bartrench", name: "바 트렌치", jp: "Bar Trench", area: "에비스", cat: "칵테일 바", hours: "18:00–늦게", note: "도쿄 크래프트 칵테일의 개척자. 진지한 한 잔. 작아서 초저녁 워크인이 유리.", tip: "", list: "bar", lat: 35.6468, lng: 139.7105, mapq: "Bar Trench Ebisu" },
+  { id: "takk", name: "Takk 신센", jp: "Takk", area: "신센", cat: "청음 바", hours: "18:00–늦게", note: "2024.10 오픈한 신센 리스닝 바. 바이닐 + 위스키·진·내추럴와인. 2층 예약형 프라이빗룸도.", tip: "프라이빗룸 예약 가능.", list: "bar", lat: 35.6565, lng: 139.6930, mapq: "Takk Shinsen bar" },
+  { id: "sgclub", name: "SG 클럽", jp: "SG Club", area: "시부야", cat: "칵테일 바", hours: "17:00–02:00", note: "고칸 신고의 멀티 플로어 바. 1층 캐주얼 시그니처, 지하 시가/스피크이지. 세계 베스트 바 단골.", tip: "지하 라운지는 예약 추천.", list: "bar", lat: 35.6635, lng: 139.6970, mapq: "SG Club Shibuya" },
   { id: "tokyufoodshow", name: "도큐 푸드쇼", jp: "東急フードショー", area: "시부야", cat: "데파치카", hours: "10:00–21:00", note: "시부야역 지하의 알짜 데파치카. 미쉐린급 벤또, 장인 페이스트리, 반찬·디저트.", tip: "막판 기념품·디저트·호텔 야식 픽업 최적.", list: "food", lat: 35.6585, lng: 139.7005, mapq: "Tokyu Food Show Shibuya" },
 
   /* ── 디저트·카페 ── */
