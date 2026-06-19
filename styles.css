@@ -104,6 +104,9 @@ input{font-family:inherit}
 .slotchips{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
 .slotchip{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:7px 11px;font-size:13px;color:var(--ink);cursor:pointer}
 .slotchip:active{background:#ece4d4}
+.evcard.slot .acts{display:flex;align-items:center;gap:10px;margin-top:12px}
+.slottime{width:140px;background:rgba(40,33,26,0.03);border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:13.5px;color:var(--ink)}
+.slottime:focus{outline:none;border-color:var(--red)}
 .addrow{display:flex;gap:8px;margin:14px 0 0}
 .addrow input{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:11px 12px;font-size:14px;color:var(--ink)}
 .addrow input:focus{outline:none;border-color:var(--red)}

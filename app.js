@@ -7,7 +7,7 @@
   var ROOT_PATH = "trips/" + (window.TRIP_ID || "default");
   var LS_KEY = "tokyotrip:" + (window.TRIP_ID || "default");
   var UI_KEY = "tokyotrip:ui:" + (window.TRIP_ID || "default");  // 기기별 화면 상태(탭 등)
-  var APP_VER = "v25";
+  var APP_VER = "v26";
 
   function emit() { listeners.forEach(function (cb) { cb(STATE); }); }
   function getPath(o, p) { var a = p.split("/"), c = o; for (var i = 0; i < a.length; i++) { if (c == null) return undefined; c = c[a[i]]; } return c; }
@@ -414,7 +414,7 @@
           '<div class="body"><div class="evcard slot" style="border-left:3px solid ' + segColor(it.cat) + '">' +
             '<div class="slottitle"><span class="slotdot" style="background:' + segColor(it.cat) + '"></span>「' + esc(segLabel(it.cat)) + '」 어디 갈까?</div>' +
             '<div class="slotchips">' + (chips || '<span class="hint">후보 없음 — 장소 탭에서 추가하세요</span>') + '</div>' +
-            '<div class="acts">' + delBtn + '</div>' +
+            '<div class="acts"><input class="slottime" inputmode="numeric" data-timeinput="' + it.base + '" value="' + esc(it.time) + '" placeholder="🕐 시간 (예: 14:00)">' + delBtn + '</div>' +
           '</div></div></div>';
       }
       return '<div class="ev ' + (it.done ? "done" : "") + '">' + timeCol + rail +
@@ -833,7 +833,13 @@
     if (t.dataset.curtoggle) { var ck = t.dataset.curtoggle, cc = DB.get("expenses/" + ck + "/cur") || "JPY"; DB.set("expenses/" + ck + "/cur", cc === "JPY" ? "KRW" : "JPY"); return; }
     if (t.dataset.newcur) { newCur = t.dataset.newcur; render(); return; }
     var as = t.closest("[data-addslot]"); if (as) { DB.push("custom/" + window.DAYS[dayIdx].key, { cat: as.dataset.addslot, time: "" }); return; }
-    if (t.dataset.fill) { var fp = t.dataset.fill.split("::"); var fpl = getPlace(fp[1]); if (fpl) { DB.set(fp[0] + "/pid", fp[1]); DB.set(fp[0] + "/title", fpl.name); } return; }
+    if (t.dataset.fill) {
+      var fp = t.dataset.fill.split("::"), fpl = getPlace(fp[1]);
+      var sev = t.closest(".ev"), sti = sev ? sev.querySelector(".slottime") : null;  // 입력 중인 시간도 같이 저장
+      if (sti && (sti.value || "").trim()) DB.set(fp[0] + "/time", sti.value.trim());
+      if (fpl) { DB.set(fp[0] + "/pid", fp[1]); DB.set(fp[0] + "/title", fpl.name); }
+      return;
+    }
     if (t.id === "addbtn") { var ti = $("#newtime").value.trim(), tt = $("#newtitle").value.trim(); if (tt) DB.push("custom/" + window.DAYS[dayIdx].key, { time: ti, title: tt }); return; }
     if (t.id === "expadd") { var lbl = $("#explbl").value.trim(), amt = Number($("#expamt").value.replace(/[^0-9.]/g, "")) || 0; if (lbl && amt) { DB.push("expenses", { label: lbl, payer: newPayer, amount: amt, cur: newCur }); } return; }
     if (t.id === "addprep") { var pv = $("#newprep").value.trim(); if (pv) addPrep(pv); return; }
@@ -861,7 +867,11 @@
     DB.set("expenses/" + k + "/payer", P[(idx + 1) % P.length].id);
   }
 
-  document.addEventListener("change", function (e) { if (e.target.dataset && e.target.dataset.memo !== undefined) DB.set(e.target.dataset.memo, e.target.value); });
+  document.addEventListener("change", function (e) {
+    if (!e.target.dataset) return;
+    if (e.target.dataset.memo !== undefined) DB.set(e.target.dataset.memo, e.target.value);
+    if (e.target.dataset.timeinput !== undefined) DB.set(e.target.dataset.timeinput + "/time", (e.target.value || "").trim());
+  });
   document.addEventListener("input", function (e) {
     var id = e.target.id;
     if (id === "plsearch") { searchBox = "plresults"; searchAction = "place"; }
