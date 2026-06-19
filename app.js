@@ -7,7 +7,7 @@
   var ROOT_PATH = "trips/" + (window.TRIP_ID || "default");
   var LS_KEY = "tokyotrip:" + (window.TRIP_ID || "default");
   var UI_KEY = "tokyotrip:ui:" + (window.TRIP_ID || "default");  // 기기별 화면 상태(탭 등)
-  var APP_VER = "v23";
+  var APP_VER = "v24";
 
   function emit() { listeners.forEach(function (cb) { cb(STATE); }); }
   function getPath(o, p) { var a = p.split("/"), c = o; for (var i = 0; i < a.length; i++) { if (c == null) return undefined; c = c[a[i]]; } return c; }
@@ -102,6 +102,11 @@
       Object.keys(w).forEach(function (pid) { Object.keys(w[pid]).forEach(function (who) { DB.set("wishes/" + pid + "/" + who, true); }); });
       DB.set("seededWish", true);
     }
+    if (!DB.get("seededPrep")) {
+      var ord = 0;
+      (window.CHECKLIST || []).forEach(function (g) { (g.items || []).forEach(function (it) { DB.push("prep", { text: it.label, done: false, order: ord++ }); }); });
+      DB.set("seededPrep", true);
+    }
   }
 
   /* ---------- 유틸 ---------- */
@@ -160,6 +165,7 @@
 
   /* ---------- 장소 검색 (구글 플레이스 우선, 없으면 OSM/Photon) ---------- */
   var searchTimer = null, lastResults = [], mapsReady = false, mapsDiag = "";
+  var searchBox = "plresults", searchAction = "place";  // 'place'=장소추가, 'hotel'=숙소설정
   function hasMapsKey() { var k = window.MAPS_API_KEY; return k && k.indexOf("PASTE") === -1; }
   function engineText() {
     if (!hasMapsKey()) return "⚪ 무료(OSM) 검색 — 구글 키 없음";
@@ -191,7 +197,7 @@
   function placeSearch(q) { if (mapsReady) googleAuto(q); else photonSearch(q); }
 
   function googleAuto(q) {
-    var box = document.getElementById("plresults"); if (!box) return;
+    var box = document.getElementById(searchBox); if (!box) return;
     box.innerHTML = '<div class="plres plres-info">검색 중…</div>';
     google.maps.importLibrary("places").then(function (lib) {
       var token = new lib.AutocompleteSessionToken();
@@ -210,30 +216,46 @@
       renderResults(q);
     }).catch(function (e) { mapsDiag = "검색 오류: " + ((e && e.message) || e); updateEngine(); console.warn("구글 자동완성 실패 → OSM:", e); photonSearch(q); });
   }
-  function addPlaceFromGoogle(r) {
+  function pickResult(r) {
+    if (!r) return;
+    if (r.google) resolveGoogle(r, applyPick);
+    else applyPick(photonRec(r));
+  }
+  function photonRec(r) {
+    var img = "images/cat/" + (r.key || "default") + ".jpg";
+    var rec = { name: r.name, area: r.area || "", cat: r.cat || "", mapq: (r.name + " " + (r.city || r.area || "")).trim(), img: img, catimg: img };
+    if (r.lat != null && r.lng != null) { rec.lat = r.lat; rec.lng = r.lng; }
+    return rec;
+  }
+  function resolveGoogle(r, cb) {
     if (!r || !r.placeId) return;
-    var box = document.getElementById("plresults"); if (box) box.innerHTML = '<div class="plres plres-info">불러오는 중…</div>';
+    var box = document.getElementById(searchBox); if (box) box.innerHTML = '<div class="plres plres-info">불러오는 중…</div>';
     google.maps.importLibrary("places").then(function (lib) {
       var place = new lib.Place({ id: r.placeId });
       return place.fetchFields({ fields: ["displayName", "formattedAddress", "location", "rating", "userRatingCount", "photos", "types"] }).then(function () { return place; });
     }).then(function (place) {
       var photo = (place.photos && place.photos[0]) ? place.photos[0].getURI({ maxWidth: 900 }) : null;
       var ckey = catKeyFromTypes(place.types);
-      var rec = { name: (place.displayName || r.name), area: shortArea(r.area || place.formattedAddress || ""),
-        cat: catKoFromTypes(place.types), seg: seg,
-        mapq: (place.displayName || r.name) + " " + (place.formattedAddress || ""),
+      cb({ name: (place.displayName || r.name), area: shortArea(r.area || place.formattedAddress || ""),
+        cat: catKoFromTypes(place.types), mapq: (place.displayName || r.name) + " " + (place.formattedAddress || ""),
         lat: place.location ? place.location.lat() : null, lng: place.location ? place.location.lng() : null,
         rating: (place.rating != null ? place.rating : null), reviews: (place.userRatingCount != null ? place.userRatingCount : null),
-        img: photo || ("images/cat/" + ckey + ".jpg"), catimg: "images/cat/" + ckey + ".jpg" };
-      if (seg === "trip") rec.trip = tripKey();
-      DB.push("uplaces", rec);
-    }).catch(function (e) { console.warn("장소 상세 실패 → 이름만 추가:", e); addNameOnly(r.name); });
+        img: photo || ("images/cat/" + ckey + ".jpg"), catimg: "images/cat/" + ckey + ".jpg" });
+    }).catch(function (e) { console.warn("장소 상세 실패:", e); cb({ name: r.name, area: r.area || "", mapq: r.name, img: "images/cat/default.jpg", catimg: "images/cat/default.jpg" }); });
   }
-  function addNameOnly(nm) {
-    nm = (nm || "").trim(); if (!nm) return;
-    var rec = { name: nm, seg: seg, mapq: nm, img: "images/cat/default.jpg" };
-    if (seg === "trip") rec.trip = tripKey();
-    DB.push("uplaces", rec);
+  function applyPick(rec) {
+    if (searchAction === "hotel") {
+      DB.set("hotel", { name: rec.name, address: rec.area || "", lat: (rec.lat != null ? rec.lat : null), lng: (rec.lng != null ? rec.lng : null), mapq: rec.mapq || rec.name });
+    } else {
+      rec.seg = seg; if (seg === "trip") rec.trip = tripKey();
+      DB.push("uplaces", rec);
+    }
+  }
+  function pickManual() {
+    var el = document.getElementById(searchAction === "hotel" ? "hotelsearch" : "plsearch");
+    var q = el ? (el.value || "").trim() : ""; if (!q) return;
+    if (searchAction === "hotel") DB.set("hotel", { name: q, address: "", lat: null, lng: null, mapq: q });
+    else { var rec = { name: q, seg: seg, mapq: q, img: "images/cat/default.jpg" }; if (seg === "trip") rec.trip = tripKey(); DB.push("uplaces", rec); }
   }
 
   function catKo(v) {
@@ -268,7 +290,7 @@
   }
   function catKeyFromTypes(types) { types = types || []; for (var i = 0; i < types.length; i++) { var k = catKey(types[i]); if (k !== "default") return k; } return "default"; }
   function photonSearch(q) {
-    var box = document.getElementById("plresults"); if (!box) return;
+    var box = document.getElementById(searchBox); if (!box) return;
     box.innerHTML = '<div class="plres plres-info">검색 중…</div>';
     fetch("https://photon.komoot.io/api/?q=" + encodeURIComponent(q) + "&limit=6&lang=en&lat=35.68&lon=139.76")
       .then(function (r) { return r.json(); })
@@ -283,7 +305,7 @@
       .catch(function () { if (box) box.innerHTML = '<div class="plres plres-info">검색 실패 — 잠시 후 다시 시도하거나 그대로 추가하세요</div>'; });
   }
   function renderResults(q) {
-    var box = document.getElementById("plresults"); if (!box) return;
+    var box = document.getElementById(searchBox); if (!box) return;
     var rows = lastResults.map(function (r, i) {
       var meta = [r.cat, r.area, r.city].filter(Boolean).join(" · ");
       return '<div class="plres" data-ridx="' + i + '"><div class="plres-nm">' + esc(r.name) + '</div>' +
@@ -291,20 +313,6 @@
     }).join("");
     rows += '<div class="plres plres-manual" data-manual="1">‘' + esc(q) + '’ 그대로 추가</div>';
     box.innerHTML = rows;
-  }
-  function addPlaceFromResult(r) {
-    if (!r) return;
-    var rec = { name: r.name, area: r.area || "", cat: r.cat || "", seg: seg, mapq: (r.name + " " + (r.city || r.area || "")).trim(), img: "images/cat/" + (r.key || "default") + ".jpg" };
-    if (r.lat != null && r.lng != null) { rec.lat = r.lat; rec.lng = r.lng; }
-    if (seg === "trip") rec.trip = tripKey();
-    DB.push("uplaces", rec);
-  }
-  function addPlaceManual() {
-    var el = document.getElementById("plsearch"); var q = el ? (el.value || "").trim() : "";
-    if (!q) return;
-    var rec = { name: q, seg: seg, mapq: q, img: "images/cat/default.jpg" };
-    if (seg === "trip") rec.trip = tripKey();
-    DB.push("uplaces", rec);
   }
 
   /* ---------- UI 상태 ---------- */
@@ -399,7 +407,15 @@
 
     var add = '<div class="tl"><div class="addrow"><input class="ti" id="newtime" placeholder="09:00"><input class="tt" id="newtitle" placeholder="새 일정 추가"><button id="addbtn">추가</button></div></div>';
 
-    return '<div class="sec">' + top + days + theme + switcher + '<div class="tl">' + tl + '</div>' + add + '</div>';
+    var h = DB.get("hotel"), hotelBanner = "";
+    if (h && h.name) {
+      hotelBanner = '<a class="hotelbanner" target="_blank" rel="noopener" href="' + mapLink(h.mapq || h.name) + '">' +
+        '<span class="hbico">🏨</span><span class="hbtxt"><b>숙소 · ' + esc(h.name) + '</b>' + (h.address ? '<span>' + esc(h.address) + '</span>' : "") + '</span><span class="hbmap">지도 ›</span></a>';
+    } else {
+      hotelBanner = '<div class="hotelbanner empty" data-gotab="prep"><span class="hbico">🏨</span><span class="hbtxt">숙소 미입력 — <b>준비 탭에서 숙소 추가</b></span></div>';
+    }
+
+    return '<div class="sec">' + top + days + theme + switcher + hotelBanner + '<div class="tl">' + tl + '</div>' + add + '</div>';
   }
 
   /* ===== 지도 ===== */
@@ -550,26 +566,61 @@
   }
 
   /* ===== 준비 ===== */
+  function prepList() {
+    var o = DB.get("prep") || {};
+    return Object.keys(o).map(function (id) { var c = o[id] || {}; return { id: id, text: c.text || "", done: !!c.done, order: (c.order != null ? c.order : 0) }; })
+      .sort(function (a, b) { return a.order - b.order; });
+  }
+  function renderHotelCard() {
+    var h = DB.get("hotel");
+    if (h && h.name) {
+      return '<div class="infocard"><div class="ih"><span class="h">숙소</span><span class="jp">宿泊</span></div>' +
+        '<div class="irow"><span class="k">' + esc(h.name) + '</span><span class="v"><button class="linkbtn" data-hotelclear="1">변경/삭제</button></span></div>' +
+        (h.address ? '<div class="irow"><span class="k" style="color:var(--sub);font-size:13px">' + esc(h.address) + '</span><span class="v"></span></div>' : "") +
+        '<a class="maplinkbtn" style="margin:12px 0 0" target="_blank" rel="noopener" href="' + mapLink(h.mapq || h.name) + '"><span class="d"></span>숙소 지도에서 보기</a>' +
+      '</div>';
+    }
+    return '<div class="infocard"><div class="ih"><span class="h">숙소</span><span class="jp">宿泊</span></div>' +
+      '<div style="font-size:13px;color:var(--sub);margin:8px 0 10px">숙소를 검색해 추가하면 일정·지도에 자동 표시돼요.</div>' +
+      '<div class="placeadd2"><input id="hotelsearch" placeholder="🏨 호텔 이름·주소 검색" autocomplete="off"><div id="hotelresults" class="plresults"></div></div>' +
+    '</div>';
+  }
   function renderPrep() {
-    var groups = window.CHECKLIST.map(function (g) {
-      var items = g.items.map(function (it) {
-        var on = !!DB.get("checks/" + it.id);
-        return '<div class="chkitem ' + (on ? "on" : "") + '" data-check="' + it.id + '"><div class="box"></div><span class="lab">' + esc(it.label) + '</span></div>';
-      }).join("");
-      var done = g.items.filter(function (it) { return DB.get("checks/" + it.id); }).length;
-      return '<div class="chkgroup"><div class="gh"><div class="l"><span class="title">' + esc(g.title) + '</span><span class="jp">' + esc(g.jp) + '</span></div><span class="pr">' + done + "/" + g.items.length + '</span></div>' + items + '</div>';
+    var items = prepList();
+    var done = items.filter(function (i) { return i.done; }).length;
+    var rows = items.map(function (it, idx) {
+      var armDel = armed === ("delprep:" + it.id);
+      return '<div class="chkitem ' + (it.done ? "on" : "") + '">' +
+        '<div class="box" data-prep="' + it.id + '"></div>' +
+        '<span class="lab editable" data-path="prep/' + it.id + '" data-field="text">' + esc(it.text) + '</span>' +
+        '<button class="mvbtn" data-moveprep="' + it.id + ':-1"' + (idx === 0 ? " disabled" : "") + '>▲</button>' +
+        '<button class="mvbtn" data-moveprep="' + it.id + ':1"' + (idx === items.length - 1 ? " disabled" : "") + '>▼</button>' +
+        '<button class="del' + (armDel ? " armed" : "") + '" data-delprep="' + it.id + '">' + (armDel ? "삭제?" : "✕") + '</button>' +
+      '</div>';
     }).join("");
 
     var info = window.INFO.map(function (c) {
-      var rows = c.rows.map(function (r) { return '<div class="irow"><span class="k">' + esc(r[0]) + '</span><span class="v">' + esc(r[1]) + '</span></div>'; }).join("");
-      return '<div class="infocard"><div class="ih"><span class="h">' + esc(c.h) + '</span><span class="jp">' + esc(c.jp) + '</span></div>' + rows + '</div>';
+      var rws = c.rows.map(function (r) { return '<div class="irow"><span class="k">' + esc(r[0]) + '</span><span class="v">' + esc(r[1]) + '</span></div>'; }).join("");
+      return '<div class="infocard"><div class="ih"><span class="h">' + esc(c.h) + '</span><span class="jp">' + esc(c.jp) + '</span></div>' + rws + '</div>';
+    }).join("");
+
+    var airport = (window.AIRPORT_TIPS || []).map(function (t) {
+      return '<div class="airrow"><div class="airtop"><span class="airname">' + esc(t.name) + (t.best ? ' <span class="airbest">추천</span>' : "") + '</span><span class="airtime">' + esc(t.time) + ' · ' + esc(t.price) + '</span></div>' +
+        '<div class="airnote">' + esc(t.note) + '</div></div>';
     }).join("");
 
     return '<div class="sec">' +
       '<div class="sechead"><div class="eyebrow">CHECKLIST</div><div class="sectitle"><div class="kr">준비</div><div class="jp">準備</div></div></div>' +
       '<div class="notice"><div class="t">6월 도쿄는 장마철이에요</div><div class="b">비 소식이 잦고 습해요. 접이식 우산과 통풍 잘되는 옷을 꼭 챙기세요.</div></div>' +
-      groups +
-      '<div style="padding:4px 22px 0"><div class="subhead" style="margin-bottom:12px">여행 정보</div>' + info + '</div>' +
+      '<div class="chkgroup"><div class="gh"><div class="l"><span class="title">체크리스트</span><span class="jp">準備物</span></div><span class="pr">' + done + " / " + items.length + '</span></div>' +
+        rows +
+        '<div class="addrow"><input class="tt" id="newprep" placeholder="준비물 추가…"><button id="addprep">추가</button></div>' +
+        '<div class="hint" style="margin-top:8px">글자 탭=수정 · ▲▼=순서변경 · ✕ 두 번=삭제</div>' +
+      '</div>' +
+      '<div style="padding:8px 22px 0">' + renderHotelCard() + '</div>' +
+      '<div style="padding:8px 22px 0"><div class="subhead" style="margin-bottom:10px">나리타 → 신주쿠 가는 법</div><div class="aircard">' + airport + '</div>' +
+        '<div class="hint" style="margin-top:8px">짐 많으면 N\'EX·리무진버스, 빠르게면 스카이라이너(닛포리 환승). 하네다 도착이면 게이큐선/모노레일로 ~50분.</div></div>' +
+      '<div style="padding:18px 22px 0"><div class="subhead" style="margin-bottom:10px">여행 정보</div>' + info + '</div>' +
       '<div style="text-align:center;margin-top:18px">' +
         '<button class="logout" data-forceupdate="1">앱 강제 업데이트(캐시 비우기)</button>' +
         (mode === "firebase" ? ' · <button class="logout" data-logout="1">로그아웃</button>' : '') +
@@ -676,6 +727,15 @@
       // 화면 맞춤: 전체일 땐 도쿄(근교 제외) 기준, 특정 카테고리일 땐 그 핀들 기준
       if (mapFilter === "all" ? (o.seg.key !== "trip") : true) pts.push([p.lat, p.lng]);
     });
+    // 숙소 마커 (항상 표시, 진한 집 모양)
+    var h = DB.get("hotel");
+    if (h && h.lat != null && h.lng != null) {
+      var hi = L.divIcon({ className: "pin", html: '<div class="hotelmark">🏨</div>', iconSize: [30, 30], iconAnchor: [15, 30], popupAnchor: [0, -28] });
+      var hm = L.marker([h.lat, h.lng], { icon: hi, zIndexOffset: 1000 }).addTo(map);
+      hm.bindTooltip("숙소 · " + (h.name || ""), { direction: "top", offset: [0, -26] });
+      markers.push(hm);
+      if (mapFilter === "all") pts.push([h.lat, h.lng]);
+    }
     setTimeout(function () { if (map) { map.invalidateSize(); if (pts.length) map.fitBounds(pts, { padding: [30, 30], maxZoom: 14 }); } }, 60);
   }
 
@@ -710,6 +770,7 @@
     var ed = t.closest(".editable");
     if (ed) { startEdit(ed); return; }
     if (nav) { armed = null; tab = nav.dataset.tab; selected = null; saveUI(); render(); window.scrollTo(0, 0); return; }
+    var gt = t.closest("[data-gotab]"); if (gt) { armed = null; tab = gt.dataset.gotab; selected = null; saveUI(); render(); window.scrollTo(0, 0); return; }
     var dc = t.closest("[data-day]"); if (dc) { armed = null; dayIdx = +dc.dataset.day; saveUI(); render(); return; }
     var sg = t.closest("[data-seg]"); if (sg) { armed = null; seg = sg.dataset.seg; saveUI(); render(); return; }
     var mf = t.closest("[data-mapfilter]"); if (mf) { mapFilter = mf.dataset.mapfilter; saveUI(); render(); return; }
@@ -728,6 +789,10 @@
     var pl = t.closest("[data-place]"); if (pl) { openSheet(pl.dataset.place); return; }
     var vv = t.closest("[data-vote]"); if (vv) { var v = vv.dataset.vote.split(":"); DB.set("wishes/" + v[0] + "/" + v[1], !DB.get("wishes/" + v[0] + "/" + v[1])); return; }
     if (t.dataset.toggle) { DB.set(t.dataset.toggle, !DB.get(t.dataset.toggle)); return; }
+    if (t.dataset.prep) { DB.set("prep/" + t.dataset.prep + "/done", !DB.get("prep/" + t.dataset.prep + "/done")); return; }
+    if (t.dataset.delprep) { var ppid = t.dataset.delprep; armOrRun("delprep:" + ppid, function () { DB.remove("prep/" + ppid); }); return; }
+    if (t.dataset.moveprep) { movePrep(t.dataset.moveprep); return; }
+    if (t.dataset.hotelclear) { DB.remove("hotel"); return; }
     var cck = t.closest("[data-check]"); if (cck) { DB.set("checks/" + cck.dataset.check, !DB.get("checks/" + cck.dataset.check)); return; }
     if (t.dataset.deldef) { var ddv = t.dataset.deldef; armOrRun("deldef:" + ddv, function () { DB.set(ddv + "/deleted", true); }); return; }
     if (t.dataset.del) { var dv = t.dataset.del; armOrRun("del:" + dv, function () { DB.remove(dv); }); return; }
@@ -737,8 +802,24 @@
     if (t.dataset.newcur) { newCur = t.dataset.newcur; render(); return; }
     if (t.id === "addbtn") { var ti = $("#newtime").value.trim(), tt = $("#newtitle").value.trim(); if (tt) DB.push("custom/" + window.DAYS[dayIdx].key, { time: ti, title: tt }); return; }
     if (t.id === "expadd") { var lbl = $("#explbl").value.trim(), amt = Number($("#expamt").value.replace(/[^0-9.]/g, "")) || 0; if (lbl && amt) { DB.push("expenses", { label: lbl, payer: newPayer, amount: amt, cur: newCur }); } return; }
-    var pr = t.closest(".plres"); if (pr) { if (pr.dataset.manual) addPlaceManual(); else { var rr = lastResults[+pr.dataset.ridx]; if (rr && rr.google) addPlaceFromGoogle(rr); else addPlaceFromResult(rr); } return; }
+    if (t.id === "addprep") { var pv = $("#newprep").value.trim(); if (pv) addPrep(pv); return; }
+    var pr = t.closest(".plres"); if (pr) { if (pr.dataset.manual) pickManual(); else pickResult(lastResults[+pr.dataset.ridx]); return; }
   });
+
+  function addPrep(text) {
+    var list = prepList();
+    var maxOrder = list.length ? list[list.length - 1].order : 0;
+    DB.push("prep", { text: text, done: false, order: maxOrder + 1 });
+  }
+  function movePrep(token) {
+    var parts = token.split(":"), id = parts[0], dir = +parts[1];
+    var list = prepList(), idx = -1;
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) { idx = i; break; }
+    var j = idx + dir; if (idx < 0 || j < 0 || j >= list.length) return;
+    var a = list[idx], b = list[j];
+    DB.set("prep/" + a.id + "/order", b.order);
+    DB.set("prep/" + b.id + "/order", a.order);
+  }
 
   function cyclePayer(k) {
     var P = people(), cur = DB.get("expenses/" + k + "/payer");
@@ -748,17 +829,22 @@
 
   document.addEventListener("change", function (e) { if (e.target.dataset && e.target.dataset.memo !== undefined) DB.set(e.target.dataset.memo, e.target.value); });
   document.addEventListener("input", function (e) {
-    if (e.target.id !== "plsearch") return;
+    var id = e.target.id;
+    if (id === "plsearch") { searchBox = "plresults"; searchAction = "place"; }
+    else if (id === "hotelsearch") { searchBox = "hotelresults"; searchAction = "hotel"; }
+    else return;
     var q = (e.target.value || "").trim();
     if (searchTimer) clearTimeout(searchTimer);
-    if (q.length < 2) { var box = document.getElementById("plresults"); if (box) box.innerHTML = ""; return; }
+    if (q.length < 2) { var box = document.getElementById(searchBox); if (box) box.innerHTML = ""; return; }
     searchTimer = setTimeout(function () { placeSearch(q); }, 320);
   });
   document.addEventListener("keydown", function (e) {
     if (e.key !== "Enter") return;
     if (e.target.id === "newtitle" || e.target.id === "newtime") $("#addbtn").click();
     if (e.target.id === "explbl" || e.target.id === "expamt") $("#expadd").click();
-    if (e.target.id === "plsearch") { e.preventDefault(); addPlaceManual(); }
+    if (e.target.id === "plsearch") { e.preventDefault(); searchBox = "plresults"; searchAction = "place"; pickManual(); }
+    if (e.target.id === "hotelsearch") { e.preventDefault(); searchBox = "hotelresults"; searchAction = "hotel"; pickManual(); }
+    if (e.target.id === "newprep") $("#addprep").click();
   });
 
   /* ---------- 시작 ---------- */
