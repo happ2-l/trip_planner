@@ -7,7 +7,7 @@
   var ROOT_PATH = "trips/" + (window.TRIP_ID || "default");
   var LS_KEY = "tokyotrip:" + (window.TRIP_ID || "default");
   var UI_KEY = "tokyotrip:ui:" + (window.TRIP_ID || "default");  // 기기별 화면 상태(탭 등)
-  var APP_VER = "v28";
+  var APP_VER = "v29";
 
   function emit() { listeners.forEach(function (cb) { cb(STATE); }); }
   function getPath(o, p) { var a = p.split("/"), c = o; for (var i = 0; i < a.length; i++) { if (c == null) return undefined; c = c[a[i]]; } return c; }
@@ -242,6 +242,32 @@
     var cust = customPlaces().filter(function (c) { return c.list === cat; });
     return def.concat(cust);
   }
+  // 일정 추가 시트: 우리 장소(큐레이션+직접추가)에서 이름으로 제안
+  function addSuggest(q) {
+    q = (q || "").toLowerCase().trim(); if (!q) return [];
+    var all = window.PLACES.filter(function (p) { return p.list && !DB.get("phidden/" + p.id); }).concat(customPlaces());
+    return all.filter(function (p) { return (p.name || "").toLowerCase().indexOf(q) >= 0 || (p.jp || "").toLowerCase().indexOf(q) >= 0; }).slice(0, 8);
+  }
+  // 삭제 + 실행취소 토스트
+  function deleteItem(base) {
+    if (base.indexOf("custom/") === 0) {
+      var obj = DB.get(base); DB.remove(base);
+      showToast("일정 삭제됨", function () { DB.set(base, obj); });
+    } else {
+      DB.set(base + "/deleted", true);
+      showToast("일정 삭제됨", function () { DB.remove(base + "/deleted"); });
+    }
+  }
+  function hideToast() { var el = document.getElementById("toast"); if (el) el.className = ""; }
+  function showToast(msg, undoFn) {
+    var el = document.getElementById("toast");
+    if (!el) { el = document.createElement("div"); el.id = "toast"; document.body.appendChild(el); }
+    el.innerHTML = '<span>' + esc(msg) + '</span>' + (undoFn ? '<button id="toastundo">실행취소</button>' : "");
+    el.className = "show";
+    if (undoFn) el.querySelector("#toastundo").onclick = function () { undoFn(); hideToast(); };
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, 6000);
+  }
   // 일정 카드별 '이 시간대 가고싶은 곳' 후보 (담은 칩 + 펼침 피커)
   function candHtml(base) {
     var obj = DB.get(base + "/cands") || {};
@@ -366,6 +392,7 @@
     if (mapFilter !== "all" && keys.indexOf(mapFilter) < 0) mapFilter = "all";
   }
   var candOpen = null, candSeg = "food";  // 일정 카드별 '가고싶은 곳' 후보 담기 UI
+  var addOpen = false, addPid = null, addPidName = "", addPend = "", toastTimer = null;  // 일정 추가 시트 + 토스트
   var armed = null, armedTimer = null;  // 두 번 탭 삭제 확인
   function armOrRun(token, run) {
     if (armed === token) { armed = null; if (armedTimer) clearTimeout(armedTimer); run(); return; }
@@ -437,39 +464,50 @@
     var tl = items.map(function (it) {
       var timeCol = '<div class="time"><span class="t editable timeedit" data-path="' + it.base + '" data-field="time">' + (esc(it.time) || "—") + '</span></div>';
       var rail = '<div class="rail"><div class="line"></div><div class="node"></div></div>';
-      var delBtn = (function () { var a = it.custom ? "del" : "deldef", on = armed === (a + ":" + it.base);
-        return '<button class="act muted' + (on ? " armed" : "") + '" data-' + a + '="' + it.base + '" style="margin-left:auto">' + (on ? "삭제 확인" : "삭제") + '</button>'; })();
+      var trash = '<button class="evtrash" data-delitem="' + it.base + '" title="삭제" style="margin-left:auto">🗑</button>';
       if (it.slot) {  // 카테고리 슬롯: 후보 장소 중 고르기
         var chips = slotCandidates(it.cat).map(function (p) { return '<button class="slotchip" data-fill="' + it.base + '::' + p.id + '">' + esc(p.name) + '</button>'; }).join("");
-        return '<div class="ev"><div class="time"><span class="t editable timeedit" data-path="' + it.base + '" data-field="time">' + (esc(it.time) || "—") + '</span></div>' + rail +
+        return '<div class="ev">' + timeCol + rail +
           '<div class="body"><div class="evcard slot" style="border-left:3px solid ' + segColor(it.cat) + '">' +
-            '<div class="slottitle"><span class="slotdot" style="background:' + segColor(it.cat) + '"></span>「' + esc(segLabel(it.cat)) + '」 어디 갈까?</div>' +
+            '<div class="slottitle"><span class="slotdot" style="background:' + segColor(it.cat) + '"></span>「' + esc(segLabel(it.cat)) + '」 어디 갈까?' + trash + '</div>' +
             '<div class="slotchips">' + (chips || '<span class="hint">후보 없음 — 장소 탭에서 추가하세요</span>') + '</div>' +
-            '<div class="acts"><input class="slottime" inputmode="numeric" data-timeinput="' + it.base + '" value="' + esc(it.time) + '" placeholder="🕐 시간 (예: 14:00)">' + delBtn + '</div>' +
+            '<div class="acts"><input class="slottime" inputmode="numeric" data-timeinput="' + it.base + '" value="' + esc(it.time) + '" placeholder="🕐 시간 (예: 14:00)"></div>' +
           '</div></div></div>';
       }
       return '<div class="ev ' + (it.done ? "done" : "") + '">' + timeCol + rail +
         '<div class="body"><div class="evcard ' + (it.done ? "done" : "") + '">' +
-          '<div class="top"><div style="min-width:0">' +
-            '<div class="title editable" data-path="' + it.base + '" data-field="title">' + (esc(it.title) || "(제목)") + '</div>' +
-            (it.jp ? '<div class="jp">' + esc(it.jp) + '</div>' : '') +
-          '</div><div class="tag">' + esc(it.tag) + '</div></div>' +
+          '<div class="top">' +
+            '<button class="evcheck' + (it.done ? " on" : "") + '" data-toggle="' + it.base + '/done" aria-label="완료"></button>' +
+            '<div style="flex:1;min-width:0">' +
+              '<div class="title editable" data-path="' + it.base + '" data-field="title">' + (esc(it.title) || "(제목)") + '</div>' +
+              (it.jp ? '<div class="jp">' + esc(it.jp) + '</div>' : '') +
+            '</div><div class="tag">' + esc(it.tag) + '</div></div>' +
           (it.sub ? '<div class="sub">' + esc(it.sub) + '</div>' : '') +
-          '<div class="acts">' +
-            (it.pid ? '<button class="act" data-place="' + it.pid + '">장소 정보 ›</button>' : '') +
-            '<button class="act muted" data-toggle="' + it.base + '/done">' + (it.done ? "완료 취소" : "완료 체크") + '</button>' +
-            delBtn +
-          '</div>' +
+          '<div class="acts">' + (it.pid ? '<button class="act" data-place="' + it.pid + '">장소 정보 ›</button>' : '') + trash + '</div>' +
           '<input class="memo" data-memo="' + it.base + '/memo" value="' + esc(it.memo) + '" placeholder="메모">' +
           candHtml(it.base) +
         '</div></div></div>';
     }).join("");
 
-    var add = '<div class="tl">' +
-      '<div class="slotadd"><span class="slotaddlbl">+ 카테고리로 추가:</span>' +
-        (window.SEGMENTS || []).map(function (s) { return '<button data-addslot="' + s.key + '">' + esc(s.label) + '</button>'; }).join("") +
-      '</div>' +
-      '<div class="addrow"><input class="ti" id="newtime" placeholder="09:00"><input class="tt" id="newtitle" placeholder="직접 입력…"><button id="addbtn">추가</button></div></div>';
+    var add = '<div class="tl"><button class="addopenbtn" data-addopenitin="1">＋ 일정 추가</button></div>';
+
+    var addSheet = "";
+    if (addOpen) {
+      addSheet = '<div class="overlay addov"><div class="scrim" data-addclose="1"></div>' +
+        '<div class="addsheet"><div class="grab"><i></i></div>' +
+          '<div class="ashead">일정 추가<button class="x2" data-addclose="1">✕</button></div>' +
+          '<div class="afield"><label>시간</label><input type="time" id="addtime" class="atime" value="' + esc(addPend || "") + '"></div>' +
+          '<div class="afield"><label>장소 · 내용</label><input id="addtitle" class="atitle" placeholder="우리 장소에서 검색 또는 직접 입력" autocomplete="off" value="' + (addPid ? esc(addPidName) : "") + '"></div>' +
+          (addPid
+            ? '<div class="apick">📍 <b>' + esc(addPidName) + '</b> 연결됨 <button data-addclearpid="1">해제</button></div>'
+            : '<div id="addresults" class="addresults"></div>') +
+          '<button class="abtn" id="addconfirm">＋ 추가</button>' +
+          '<div class="adiv">— 또는 정하지 않고 칸만 만들기 —</div>' +
+          '<div class="acats">' + (window.SEGMENTS || []).map(function (s) {
+            return '<button data-addcat="' + s.key + '"><span class="legdot" style="background:' + s.color + '"></span>' + esc(s.label) + '</button>';
+          }).join("") + '</div>' +
+        '</div></div>';
+    }
 
     var h = DB.get("hotel"), hotelBanner = "";
     if (h && h.name) {
@@ -479,7 +517,7 @@
       hotelBanner = '<div class="hotelbanner empty" data-gotab="prep"><span class="hbico">🏨</span><span class="hbtxt">숙소 미입력 — <b>준비 탭에서 숙소 추가</b></span></div>';
     }
 
-    return '<div class="sec">' + top + days + theme + switcher + hotelBanner + '<div class="tl">' + tl + '</div>' + add + '</div>';
+    return '<div class="sec">' + top + days + theme + switcher + hotelBanner + '<div class="tl">' + tl + '</div>' + add + '</div>' + addSheet;
   }
 
   /* ===== 지도 ===== */
@@ -869,6 +907,19 @@
     var co = t.closest("[data-candopen]"); if (co) { var cb = co.dataset.candopen; candOpen = (candOpen === cb) ? null : cb; render(); return; }
     var csg = t.closest("[data-candseg]"); if (csg) { candSeg = csg.dataset.candseg; render(); return; }
     if (t.dataset.candtoggle) { var ctp = t.dataset.candtoggle.split("::"), cpath = ctp[0] + "/cands/" + ctp[1]; if (DB.get(cpath)) DB.remove(cpath); else DB.set(cpath, true); return; }
+    if (t.dataset.addopenitin) { addOpen = true; addPid = null; addPidName = ""; render(); var ati = document.getElementById("addtitle"); if (ati) setTimeout(function () { ati.focus(); }, 60); return; }
+    if (t.closest("[data-addclose]")) { addOpen = false; addPid = null; render(); return; }
+    var apk = t.closest("[data-addpick]"); if (apk) { var ap = getPlace(apk.dataset.addpick); addPid = apk.dataset.addpick; addPidName = ap ? ap.name : addPid; render(); return; }
+    if (t.dataset.addclearpid) { addPid = null; addPidName = ""; render(); return; }
+    if (t.dataset.addcat) { var actv = ($("#addtime") || {}).value || ""; DB.push("custom/" + window.DAYS[dayIdx].key, { cat: t.dataset.addcat, time: actv }); addPend = actv; addOpen = false; addPid = null; render(); return; }
+    if (t.id === "addconfirm") {
+      var atv = ($("#addtime") || {}).value || "", att = (($("#addtitle") || {}).value || "").trim(), dk = window.DAYS[dayIdx].key;
+      if (addPid) DB.push("custom/" + dk, { time: atv, title: addPidName, pid: addPid });
+      else if (att) DB.push("custom/" + dk, { time: atv, title: att });
+      else return;
+      addPend = atv; addOpen = false; addPid = null; render(); return;
+    }
+    if (t.dataset.delitem) { deleteItem(t.dataset.delitem); return; }
     if (t.dataset.delplace) { var dpv = t.dataset.delplace; armOrRun("delplace:" + dpv, function () { DB.remove("uplaces/" + dpv); }); return; }
     if (t.dataset.hideplace) { var hpv = t.dataset.hideplace; armOrRun("hideplace:" + hpv, function () { DB.set("phidden/" + hpv, true); }); return; }
     var pl = t.closest("[data-place]"); if (pl) { openSheet(pl.dataset.place); return; }
@@ -934,6 +985,14 @@
   });
   document.addEventListener("input", function (e) {
     var id = e.target.id;
+    if (id === "addtitle") {
+      var box = document.getElementById("addresults"); if (!box) return;
+      var q = e.target.value.trim();
+      box.innerHTML = q ? (addSuggest(q).map(function (p) {
+        return '<div class="plres" data-addpick="' + p.id + '"><div class="plres-nm">' + esc(p.name) + '</div><div class="plres-meta">' + esc(segLabel(p.list) || "") + (p.area ? " · " + esc(p.area) : "") + '</div></div>';
+      }).join("") || '<div class="plres plres-info">검색 결과 없음 — 그대로 ‘추가’ 누르면 직접 입력</div>') : "";
+      return;
+    }
     if (id === "plsearch") { searchBox = "plresults"; searchAction = "place"; }
     else if (id === "hotelsearch") { searchBox = "hotelresults"; searchAction = "hotel"; }
     else return;
@@ -950,6 +1009,7 @@
     if (e.target.id === "hotelsearch") { e.preventDefault(); searchBox = "hotelresults"; searchAction = "hotel"; pickManual(); }
     if (e.target.id === "newprep") $("#addprep").click();
     if (e.target.id === "newtip") $("#addtip").click();
+    if (e.target.id === "addtitle") { e.preventDefault(); $("#addconfirm").click(); }
   });
 
   /* ---------- 시작 ---------- */
