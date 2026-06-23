@@ -7,7 +7,7 @@
   var ROOT_PATH = "trips/" + (window.TRIP_ID || "default");
   var LS_KEY = "tokyotrip:" + (window.TRIP_ID || "default");
   var UI_KEY = "tokyotrip:ui:" + (window.TRIP_ID || "default");  // 기기별 화면 상태(탭 등)
-  var APP_VER = "v29";
+  var APP_VER = "v30";
 
   function emit() { listeners.forEach(function (cb) { cb(STATE); }); }
   function getPath(o, p) { var a = p.split("/"), c = o; for (var i = 0; i < a.length; i++) { if (c == null) return undefined; c = c[a[i]]; } return c; }
@@ -258,6 +258,14 @@
       showToast("일정 삭제됨", function () { DB.remove(base + "/deleted"); });
     }
   }
+  // 시간 사이 삽입 — 사이 시간 계산 + 삽입 존
+  function toMin(t) { var m = /^(\d{1,2}):(\d{2})$/.exec(t || ""); return m ? (+m[1] * 60 + +m[2]) : null; }
+  function toHHMM(min) { min = ((min % 1440) + 1440) % 1440; var h = Math.floor(min / 60), mm = min % 60; return (h < 10 ? "0" : "") + h + ":" + (mm < 10 ? "0" : "") + mm; }
+  function midTime(a, b) { var A = toMin(a), B = toMin(b); if (A != null && B != null) return toHHMM(Math.round((A + B) / 2)); if (B != null) return toHHMM(B - 30); if (A != null) return toHHMM(A + 60); return ""; }
+  function insertZone(time) {
+    return '<div class="insz" data-insertgap="' + esc(time || "") + '"><div class="inszt">' + esc(time || "") + '</div>' +
+      '<div class="inszrail"><span class="inszplus">＋</span></div><div class="inszline"></div></div>';
+  }
   function hideToast() { var el = document.getElementById("toast"); if (el) el.className = ""; }
   function showToast(msg, undoFn) {
     var el = document.getElementById("toast");
@@ -461,7 +469,7 @@
     });
     items.sort(function (a, b) { return (a.time || "").localeCompare(b.time || ""); });
 
-    var tl = items.map(function (it) {
+    var cards = items.map(function (it) {
       var timeCol = '<div class="time"><span class="t editable timeedit" data-path="' + it.base + '" data-field="time">' + (esc(it.time) || "—") + '</span></div>';
       var rail = '<div class="rail"><div class="line"></div><div class="node"></div></div>';
       var trash = '<button class="evtrash" data-delitem="' + it.base + '" title="삭제" style="margin-left:auto">🗑</button>';
@@ -487,7 +495,14 @@
           '<input class="memo" data-memo="' + it.base + '/memo" value="' + esc(it.memo) + '" placeholder="메모">' +
           candHtml(it.base) +
         '</div></div></div>';
-    }).join("");
+    });
+    // 카드 사이에 '삽입 존' — 탭하면 사이 시간으로 추가 시트 열림
+    var tl = "";
+    items.forEach(function (it, i) {
+      tl += insertZone(midTime(i > 0 ? items[i - 1].time : "", it.time));
+      tl += cards[i];
+    });
+    tl += insertZone(items.length ? midTime(items[items.length - 1].time, "") : "09:00");
 
     var add = '<div class="tl"><button class="addopenbtn" data-addopenitin="1">＋ 일정 추가</button></div>';
 
@@ -908,6 +923,7 @@
     var csg = t.closest("[data-candseg]"); if (csg) { candSeg = csg.dataset.candseg; render(); return; }
     if (t.dataset.candtoggle) { var ctp = t.dataset.candtoggle.split("::"), cpath = ctp[0] + "/cands/" + ctp[1]; if (DB.get(cpath)) DB.remove(cpath); else DB.set(cpath, true); return; }
     if (t.dataset.addopenitin) { addOpen = true; addPid = null; addPidName = ""; render(); var ati = document.getElementById("addtitle"); if (ati) setTimeout(function () { ati.focus(); }, 60); return; }
+    var iz = t.closest("[data-insertgap]"); if (iz) { addOpen = true; addPid = null; addPidName = ""; addPend = iz.dataset.insertgap || ""; render(); var ati2 = document.getElementById("addtitle"); if (ati2) setTimeout(function () { ati2.focus(); }, 60); return; }
     if (t.closest("[data-addclose]")) { addOpen = false; addPid = null; render(); return; }
     var apk = t.closest("[data-addpick]"); if (apk) { var ap = getPlace(apk.dataset.addpick); addPid = apk.dataset.addpick; addPidName = ap ? ap.name : addPid; render(); return; }
     if (t.dataset.addclearpid) { addPid = null; addPidName = ""; render(); return; }
