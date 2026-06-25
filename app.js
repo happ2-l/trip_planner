@@ -7,7 +7,7 @@
   var ROOT_PATH = "trips/" + (window.TRIP_ID || "default");
   var LS_KEY = "tokyotrip:" + (window.TRIP_ID || "default");
   var UI_KEY = "tokyotrip:ui:" + (window.TRIP_ID || "default");  // 기기별 화면 상태(탭 등)
-  var APP_VER = "v30";
+  var APP_VER = "v31";
 
   function emit() { listeners.forEach(function (cb) { cb(STATE); }); }
   function getPath(o, p) { var a = p.split("/"), c = o; for (var i = 0; i < a.length; i++) { if (c == null) return undefined; c = c[a[i]]; } return c; }
@@ -266,6 +266,11 @@
     return '<div class="insz" data-insertgap="' + esc(time || "") + '"><div class="inszt">' + esc(time || "") + '</div>' +
       '<div class="inszrail"><span class="inszplus">＋</span></div><div class="inszline"></div></div>';
   }
+  // 직접 추가 일정의 저장 위치 — 2일차는 활성 플랜별로 분리(도쿄 시내/근교 따로 채우기)
+  function curCustomRoot() {
+    var d = window.DAYS[dayIdx];
+    return d.daytrip ? "custom/" + d.key + "__" + (DB.get("daytrip") || window.DAYTRIPS[0].key) : "custom/" + d.key;
+  }
   function hideToast() { var el = document.getElementById("toast"); if (el) el.className = ""; }
   function showToast(msg, undoFn) {
     var el = document.getElementById("toast");
@@ -460,12 +465,16 @@
         time: pick(DB.get(base + "/time"), it.time), title: pick(DB.get(base + "/title"), it.title),
         done: !!DB.get(base + "/done"), memo: DB.get(base + "/memo") || "" });
     });
-    var custom = DB.get("custom/" + day.key) || {};
-    Object.keys(custom).forEach(function (id) {
-      var c = custom[id], base = "custom/" + day.key + "/" + id;
-      items.push({ base: base, custom: true, pid: c.pid || null, cat: c.cat || null,
-        jp: "", sub: "", tag: c.cat ? segLabel(c.cat) : "추가", time: c.time || "", title: c.title || "",
-        done: !!c.done, memo: c.memo || "", slot: !!(c.cat && !c.title) });
+    var customRoots = ["custom/" + day.key];  // 기존(일자 공통) 직접추가 — 호환 위해 계속 표시
+    if (day.daytrip) customRoots.push("custom/" + day.key + "__" + active);  // 2일차는 플랜별로 분리 저장(도쿄 시내/근교 따로)
+    customRoots.forEach(function (root) {
+      var custom = DB.get(root) || {};
+      Object.keys(custom).forEach(function (id) {
+        var c = custom[id], base = root + "/" + id;
+        items.push({ base: base, custom: true, pid: c.pid || null, cat: c.cat || null,
+          jp: "", sub: "", tag: c.cat ? segLabel(c.cat) : "추가", time: c.time || "", title: c.title || "",
+          done: !!c.done, memo: c.memo || "", slot: !!(c.cat && !c.title) });
+      });
     });
     items.sort(function (a, b) { return (a.time || "").localeCompare(b.time || ""); });
 
@@ -503,6 +512,7 @@
       tl += cards[i];
     });
     tl += insertZone(items.length ? midTime(items[items.length - 1].time, "") : "09:00");
+    if (!items.length) tl = '<div class="emptyday">아직 일정이 없어요.<br><b>＋ 일정 추가</b> 또는 <b>시간 사이 점선(＋)</b>을 탭해 자유롭게 채워보세요 🛍️🍽️</div>' + tl;
 
     var add = '<div class="tl"><button class="addopenbtn" data-addopenitin="1">＋ 일정 추가</button></div>';
 
@@ -927,11 +937,11 @@
     if (t.closest("[data-addclose]")) { addOpen = false; addPid = null; render(); return; }
     var apk = t.closest("[data-addpick]"); if (apk) { var ap = getPlace(apk.dataset.addpick); addPid = apk.dataset.addpick; addPidName = ap ? ap.name : addPid; render(); return; }
     if (t.dataset.addclearpid) { addPid = null; addPidName = ""; render(); return; }
-    if (t.dataset.addcat) { var actv = ($("#addtime") || {}).value || ""; DB.push("custom/" + window.DAYS[dayIdx].key, { cat: t.dataset.addcat, time: actv }); addPend = actv; addOpen = false; addPid = null; render(); return; }
+    if (t.dataset.addcat) { var actv = ($("#addtime") || {}).value || ""; DB.push(curCustomRoot(), { cat: t.dataset.addcat, time: actv }); addPend = actv; addOpen = false; addPid = null; render(); return; }
     if (t.id === "addconfirm") {
-      var atv = ($("#addtime") || {}).value || "", att = (($("#addtitle") || {}).value || "").trim(), dk = window.DAYS[dayIdx].key;
-      if (addPid) DB.push("custom/" + dk, { time: atv, title: addPidName, pid: addPid });
-      else if (att) DB.push("custom/" + dk, { time: atv, title: att });
+      var atv = ($("#addtime") || {}).value || "", att = (($("#addtitle") || {}).value || "").trim(), dk = curCustomRoot();
+      if (addPid) DB.push(dk, { time: atv, title: addPidName, pid: addPid });
+      else if (att) DB.push(dk, { time: atv, title: att });
       else return;
       addPend = atv; addOpen = false; addPid = null; render(); return;
     }

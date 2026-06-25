@@ -125,6 +125,11 @@ input{font-family:inherit}
 .evtrash{background:none;border:none;font-size:15px;cursor:pointer;opacity:.5;padding:3px 5px;line-height:1;border-radius:8px}
 .evtrash:active{opacity:1;background:rgba(178,59,59,.1)}
 
+/* 빈 일정 안내 */
+.emptyday{margin:8px 22px 14px;padding:22px 18px;border:1px dashed var(--line);border-radius:14px;background:rgba(255,255,255,.4);
+  text-align:center;color:var(--sub);font-size:13.5px;line-height:1.8}
+.emptyday b{color:var(--red)}
+
 /* 시간 사이 삽입 존 (탭하면 그 사이 시간으로 추가) */
 .insz{display:flex;align-items:center;height:26px;cursor:pointer;opacity:.45}
 .insz:active{opacity:1}
