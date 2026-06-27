@@ -299,6 +299,7 @@ input{font-family:inherit}
 .expadd input:focus{outline:none;border-color:var(--red)}
 .expadd .lbl{flex:1;min-width:120px}
 .expadd .amt{width:96px}
+.expadd .date{width:150px;font-family:inherit;color:var(--ink)}
 .expadd .payer{display:flex;gap:6px}
 .expadd .pbtn{width:34px;height:34px;border-radius:50%;border:2px solid transparent;color:#fff;font-family:var(--serif);font-size:13px;cursor:pointer;opacity:.45}
 .expadd .pbtn.on{opacity:1;border-color:var(--ink)}
