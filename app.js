@@ -7,7 +7,7 @@
   var ROOT_PATH = "trips/" + (window.TRIP_ID || "default");
   var LS_KEY = "tokyotrip:" + (window.TRIP_ID || "default");
   var UI_KEY = "tokyotrip:ui:" + (window.TRIP_ID || "default");  // 기기별 화면 상태(탭 등)
-  var APP_VER = "v31";
+  var APP_VER = "v32";
 
   function emit() { listeners.forEach(function (cb) { cb(STATE); }); }
   function getPath(o, p) { var a = p.split("/"), c = o; for (var i = 0; i < a.length; i++) { if (c == null) return undefined; c = c[a[i]]; } return c; }
@@ -115,6 +115,7 @@
   function fx() { return (window.FX && window.FX.krwPerJpy) || 9.5; }
   function conv(amt, from, to) { amt = +amt || 0; if (from === to) return amt; return from === "JPY" ? amt * fx() : amt / fx(); }
   function fmtC(n, cur) { return (cur === "KRW" ? "₩" : "¥") + Math.round(n || 0).toLocaleString("en-US"); }
+  function fmtDate(s) { if (!s) return ""; var p = ("" + s).split("-"); return p.length === 3 ? (+p[1]) + "/" + (+p[2]) : s; }
   function mapLink(q) { return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(q); }
   function rateOf(id) { return (window.RATINGS || {})[id] || null; }
   function num(n) { return (n || 0).toLocaleString("en-US"); }
@@ -397,6 +398,7 @@
 
   /* ---------- UI 상태 ---------- */
   var tab = "itin", dayIdx = 0, seg = "shop", selected = null, newPayer = "m", newCur = "JPY", mapFilter = "all";
+  var newLbl = "", newAmt = "", newDate = "";
   function saveUI() { try { localStorage.setItem(UI_KEY, JSON.stringify({ tab: tab, dayIdx: dayIdx, seg: seg, mapFilter: mapFilter })); } catch (e) {} }
   function loadUI() {
     try { var u = JSON.parse(localStorage.getItem(UI_KEY)); if (u) { if (u.tab) tab = u.tab; if (u.dayIdx != null) dayIdx = u.dayIdx; if (u.seg) seg = u.seg; if (u.mapFilter) mapFilter = u.mapFilter; } } catch (e) {}
@@ -666,7 +668,7 @@
     var expList = rows.map(function (r) {
       var payer = pm[r.e.payer] || P[0], cur = r.e.cur || "JPY";
       return '<div class="exprow"><div class="av" style="background:' + payer.color + '" data-payer="' + r.k + '">' + esc(payer.ini) + '</div>' +
-        '<div style="flex:1;min-width:0"><div class="lbl editable" data-path="expenses/' + r.k + '" data-field="label">' + esc(r.e.label) + '</div><div class="who">' + esc(payer.name) + ' 결제 · 탭하면 변경</div></div>' +
+        '<div style="flex:1;min-width:0"><div class="lbl editable" data-path="expenses/' + r.k + '" data-field="label">' + esc(r.e.label) + '</div><div class="who">' + (r.e.date ? esc(fmtDate(r.e.date)) + ' · ' : "") + esc(payer.name) + ' 결제 · 탭하면 변경</div></div>' +
         '<button class="curchip" data-curtoggle="' + r.k + '">' + (cur === "KRW" ? "₩" : "¥") + '</button>' +
         '<div class="amt editable" data-path="expenses/' + r.k + '" data-field="amount">' + fmtC(r.e.amount, cur) + '</div>' +
         '<button class="del' + (armed === "del:expenses/" + r.k ? " armed" : "") + '" data-del="expenses/' + r.k + '">' + (armed === "del:expenses/" + r.k ? "삭제?" : "✕") + '</button></div>';
@@ -687,7 +689,7 @@
       '<div style="padding:26px 22px 0"><div class="subhead">정산 현황</div>' + balances + '</div>' +
       '<div style="padding:26px 22px 0"><div class="subhead">정산 방법</div>' + setHtml + '</div>' +
       '<div style="padding:26px 22px 0"><div class="subhead">지출 내역</div>' + expList +
-        '<div class="expadd"><input class="lbl" id="explbl" placeholder="지출 항목"><div class="payer">' + payerBtns + '</div><div class="curpick">' + newCurBtns + '</div><input class="amt" id="expamt" placeholder="금액" inputmode="numeric"><button class="go" id="expadd">추가</button></div>' +
+        '<div class="expadd"><input class="lbl" id="explbl" placeholder="지출 항목" value="' + esc(newLbl) + '"><input class="date" id="expdate" type="date" value="' + esc(newDate) + '"><div class="payer">' + payerBtns + '</div><div class="curpick">' + newCurBtns + '</div><input class="amt" id="expamt" placeholder="금액" inputmode="numeric" value="' + esc(newAmt) + '"><button class="go" id="expadd">추가</button></div>' +
         '<div class="hint">* 금액 탭=수정 · 아바타 탭=결제자 · 통화(¥/₩) 탭=전환. 합계는 표시 통화로 환산(100엔=950원). 실시간 공유.</div>' +
       '</div></div>';
   }
@@ -972,7 +974,7 @@
       return;
     }
     if (t.id === "addbtn") { var ti = $("#newtime").value.trim(), tt = $("#newtitle").value.trim(); if (tt) DB.push("custom/" + window.DAYS[dayIdx].key, { time: ti, title: tt }); return; }
-    if (t.id === "expadd") { var lbl = $("#explbl").value.trim(), amt = Number($("#expamt").value.replace(/[^0-9.]/g, "")) || 0; if (lbl && amt) { DB.push("expenses", { label: lbl, payer: newPayer, amount: amt, cur: newCur }); } return; }
+    if (t.id === "expadd") { var lbl = $("#explbl").value.trim(), amt = Number($("#expamt").value.replace(/[^0-9.]/g, "")) || 0, dt = $("#expdate") ? $("#expdate").value : ""; if (lbl && amt) { DB.push("expenses", { label: lbl, payer: newPayer, amount: amt, cur: newCur, date: dt }); newLbl = ""; newAmt = ""; newDate = ""; } return; }
     if (t.id === "addprep") { var pv = $("#newprep").value.trim(); if (pv) addPrep(pv); return; }
     if (t.id === "addtip") { var tv = $("#newtip").value.trim(); if (tv) addTip(tv); return; }
     var pr = t.closest(".plres"); if (pr) { if (pr.dataset.manual) pickManual(); else pickResult(lastResults[+pr.dataset.ridx]); return; }
@@ -1006,6 +1008,7 @@
 
   document.addEventListener("change", function (e) {
     if (!e.target.dataset) return;
+    if (e.target.id === "expdate") { newDate = e.target.value; return; }
     if (e.target.dataset.memo !== undefined) DB.set(e.target.dataset.memo, e.target.value);
     if (e.target.dataset.timeinput !== undefined) DB.set(e.target.dataset.timeinput + "/time", (e.target.value || "").trim());
   });
@@ -1019,6 +1022,9 @@
       }).join("") || '<div class="plres plres-info">검색 결과 없음 — 그대로 ‘추가’ 누르면 직접 입력</div>') : "";
       return;
     }
+    if (id === "explbl") { newLbl = e.target.value; return; }
+    if (id === "expamt") { newAmt = e.target.value; return; }
+    if (id === "expdate") { newDate = e.target.value; return; }
     if (id === "plsearch") { searchBox = "plresults"; searchAction = "place"; }
     else if (id === "hotelsearch") { searchBox = "hotelresults"; searchAction = "hotel"; }
     else return;
